@@ -1,0 +1,43 @@
+"""Run lifecycle for agent interactions using Microsoft Agent Framework."""
+
+import asyncio
+import logging
+
+from agents._base.agent_factory import create_agent
+from agents._base.config import AgentBaseConfig
+
+logger = logging.getLogger(__name__)
+
+
+async def run_agent_async(config: AgentBaseConfig, prompt: str) -> str:
+    """Execute a single-turn conversation with an agent (async).
+
+    Creates the agent from config, runs it with the given prompt,
+    and returns the response text. The agent handles tool calling
+    automatically via the Microsoft Agent Framework.
+
+    Args:
+        config: Agent configuration (subclass of AgentBaseConfig).
+        prompt: The user message to send.
+
+    Returns:
+        The agent's response text.
+    """
+    agent = create_agent(config)
+    logger.info("Running agent '%s' with prompt: %s...", config.agent_name, prompt[:50])
+
+    result = await agent.run(prompt)
+    return result.text if hasattr(result, "text") else str(result)
+
+
+def run_agent(config: AgentBaseConfig, prompt: str) -> str:
+    """Execute a single-turn conversation with an agent (sync wrapper).
+
+    Args:
+        config: Agent configuration (subclass of AgentBaseConfig).
+        prompt: The user message to send.
+
+    Returns:
+        The agent's response text.
+    """
+    return asyncio.run(run_agent_async(config, prompt))

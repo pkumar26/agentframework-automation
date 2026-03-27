@@ -1,0 +1,13 @@
+services:
+  agent:
+    build: .
+    ports:
+      - "8088:8088"
+    environment:
+      - AGENT_NAME=${AGENT_NAME:-code-helper}
+      - AZURE_AI_PROJECT_ENDPOINT=${AZURE_AI_PROJECT_ENDPOINT}
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}
+    env_file:
+      - .env

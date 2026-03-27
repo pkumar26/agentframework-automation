@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentframework-automation"
+version = "0.1.0"
+description = "Multi-agent platform using Microsoft Agent Framework with Azure AI Foundry models"
+requires-python = ">=3.11"
+readme = "README.md"
+license = {text = "MIT"}
+dependencies = [
+    "agent-framework",
+    "azure-identity>=1.15.0",
+    "pydantic-settings>=2.0.0",
+    "azure-ai-agentserver-agentframework",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "black[jupyter]>=24.0.0",
+    "isort>=5.13.0",
+    "flake8>=7.0.0",
+    "ipykernel>=6.29.0",
+    "python-dotenv>=1.0.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["agents*", "scripts*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+    "integration: marks tests requiring live Azure credentials",
+    "code_helper: marks tests for the code-helper agent",
+    "doc_assistant: marks tests for the doc-assistant agent",
+]
