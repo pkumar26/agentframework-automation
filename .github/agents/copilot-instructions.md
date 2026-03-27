@@ -22,7 +22,7 @@ docker-compose.yml
 ## Commands
 
 ```bash
-pip install -e ".[dev]"                           # Install dependencies
+uv sync --group dev                                # Install dependencies
 pytest tests/ -m "not integration" -v             # Unit tests
 pytest tests/ -m integration -v                   # Integration tests (requires AZURE_AI_PROJECT_ENDPOINT)
 python scripts/run_agent.py --name <agent>        # Run agent interactively

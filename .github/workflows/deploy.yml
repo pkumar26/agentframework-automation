@@ -43,8 +43,11 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
       - name: Install dependencies
-        run: pip install -e .
+        run: uv sync
 
       # Stage 1: Validate agent target
       - name: Validate agent target
@@ -153,7 +156,7 @@ jobs:
           }
 
           if [ "$AGENT_NAME" = "all" ]; then
-            AGENTS=$(python -c "from agents.registry import REGISTRY; print(' '.join(REGISTRY.list_agents()))")
+            AGENTS=$(python -c "from agents.registry import REGISTRY; print(' '.join(e.name for e in REGISTRY.list_agents()))")
             for agent in $AGENTS; do
               deploy_agent "$agent"
             done
@@ -163,7 +166,7 @@ jobs:
 
       # Stage 5: Run integration tests
       - name: Install test dependencies
-        run: pip install -e ".[dev]"
+        run: uv sync --group dev
 
       - name: Run integration tests
         env:

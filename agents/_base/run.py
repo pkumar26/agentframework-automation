@@ -1,6 +1,7 @@
 """Run lifecycle for agent interactions using Microsoft Agent Framework."""
 
 import asyncio
+import concurrent.futures
 import logging
 
 from agents._base.agent_factory import create_agent
@@ -33,6 +34,8 @@ async def run_agent_async(config: AgentBaseConfig, prompt: str) -> str:
 def run_agent(config: AgentBaseConfig, prompt: str) -> str:
     """Execute a single-turn conversation with an agent (sync wrapper).
 
+    Safe to call from both regular scripts and Jupyter notebooks.
+
     Args:
         config: Agent configuration (subclass of AgentBaseConfig).
         prompt: The user message to send.
@@ -40,4 +43,12 @@ def run_agent(config: AgentBaseConfig, prompt: str) -> str:
     Returns:
         The agent's response text.
     """
-    return asyncio.run(run_agent_async(config, prompt))
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        # No running loop — use asyncio.run() directly
+        return asyncio.run(run_agent_async(config, prompt))
+
+    # Already inside a running loop (e.g. Jupyter) — run in a new thread
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, run_agent_async(config, prompt)).result()

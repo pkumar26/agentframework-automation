@@ -51,6 +51,28 @@ def validate_name(name: str) -> str | None:
 # ---------------------------------------------------------------------------
 # Name derivation helpers
 # ---------------------------------------------------------------------------
+def _parse_yaml_config(filepath: str) -> dict[str, str]:
+    """Parse a simple key-value YAML config file (name, model).
+
+    Supports only top-level scalar key: value pairs and comments.
+    Uses no external dependencies.
+    """
+    path = Path(filepath)
+    if not path.exists():
+        raise FileNotFoundError(f"Config file not found: {filepath}")
+
+    config: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if ":" not in line:
+            continue
+        key, _, value = line.partition(":")
+        config[key.strip()] = value.strip().strip('"').strip("'")
+    return config
+
+
 def to_module_name(name: str) -> str:
     """Convert kebab-case name to snake_case module name."""
     return name.replace("-", "_")
@@ -390,7 +412,7 @@ def _template_test_tools(module_name: str, display_name: str) -> str:
     ''')
 
 
-def _template_test_agent_create(module_name: str, agent_name: str) -> str:
+def _template_test_agent_create(module_name: str, agent_name: str, config_class_name: str) -> str:
     """Return test_agent_create.py content for the scaffolded agent's tests."""
     marker = module_name
     return textwrap.dedent(f'''\
@@ -417,18 +439,17 @@ def _template_test_agent_create(module_name: str, agent_name: str) -> str:
             def test_creates_agent_from_config(self):
                 """Should assemble an agent from config."""
                 from agents._base.agent_factory import create_agent
-                from agents.{module_name}.config import {module_name.replace("_", " ").title().replace(" ", "")}Config
+                from agents.{module_name}.config import {config_class_name}
 
-                config = {module_name.replace("_", " ").title().replace(" ", "")}Config()
+                config = {config_class_name}()
                 agent = create_agent(config)
                 assert agent is not None
     ''')
 
 
-def _template_test_agent_run(module_name: str, agent_name: str) -> str:
+def _template_test_agent_run(module_name: str, agent_name: str, config_class_name: str) -> str:
     """Return test_agent_run.py content for the scaffolded agent's tests."""
     marker = module_name
-    config_cls = module_name.replace("_", " ").title().replace(" ", "") + "Config"
     return textwrap.dedent(f'''\
         """Integration tests for {agent_name} agent run lifecycle."""
 
@@ -454,9 +475,9 @@ def _template_test_agent_run(module_name: str, agent_name: str) -> str:
             def test_agent_responds_to_prompt(self):
                 """Should run the agent and get a response."""
                 from agents._base.agent_factory import create_agent
-                from agents.{module_name}.config import {config_cls}
+                from agents.{module_name}.config import {config_class_name}
 
-                config = {config_cls}()
+                config = {config_class_name}()
                 agent = create_agent(config)
                 result = asyncio.run(agent.run("Say 'Test OK' and nothing else."))
                 assert result is not None
@@ -516,9 +537,9 @@ def _generate_test_files(
         (base / "test_tools.py", _template_test_tools(module_name, display_name)),
         (
             base / "test_agent_create.py",
-            _template_test_agent_create(module_name, name),
+            _template_test_agent_create(module_name, name, config_cls),
         ),
-        (base / "test_agent_run.py", _template_test_agent_run(module_name, name)),
+        (base / "test_agent_run.py", _template_test_agent_run(module_name, name, config_cls)),
     ]
 
     created: list[Path] = []
@@ -614,11 +635,17 @@ def build_parser() -> argparse.ArgumentParser:
         description="Scaffold a new agent for the Agent Framework Platform",
         prog="create_agent.py",
     )
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
         "--name",
         type=str,
-        required=True,
         help="Agent name in kebab-case (e.g., my-agent)",
+    )
+    group.add_argument(
+        "--from-file",
+        type=str,
+        dest="from_file",
+        help="Path to a YAML config file with 'name' and optional 'model' keys",
     )
     parser.add_argument(
         "--model",
@@ -634,8 +661,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    name: str = args.name
-    model: str = args.model
+    if args.from_file:
+        file_config = _parse_yaml_config(args.from_file)
+        name = file_config.get("name", "")
+        model = file_config.get("model", args.model)
+    else:
+        name = args.name
+        model = args.model
 
     # Validate name
     error = validate_name(name)

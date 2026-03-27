@@ -3,6 +3,7 @@
 import pytest
 
 from scripts.create_agent import (
+    _parse_yaml_config,
     check_existence,
     to_class_prefix,
     to_config_class_name,
@@ -102,3 +103,30 @@ class TestCheckExistence:
         )
         assert result is not None
         assert "already registered" in result
+
+
+class TestParseYamlConfig:
+    """Tests for YAML config file parsing."""
+
+    def test_parses_name_and_model(self, tmp_path):
+        cfg = tmp_path / "config.yaml"
+        cfg.write_text("name: my-agent\nmodel: gpt-4o-mini\n")
+        result = _parse_yaml_config(str(cfg))
+        assert result == {"name": "my-agent", "model": "gpt-4o-mini"}
+
+    def test_ignores_comments_and_blanks(self, tmp_path):
+        cfg = tmp_path / "config.yaml"
+        cfg.write_text("# comment\n\nname: my-agent\n")
+        result = _parse_yaml_config(str(cfg))
+        assert result == {"name": "my-agent"}
+
+    def test_strips_quotes(self, tmp_path):
+        cfg = tmp_path / "config.yaml"
+        cfg.write_text('name: "my-agent"\nmodel: \'gpt-4o\'\n')
+        result = _parse_yaml_config(str(cfg))
+        assert result["name"] == "my-agent"
+        assert result["model"] == "gpt-4o"
+
+    def test_raises_on_missing_file(self):
+        with pytest.raises(FileNotFoundError):
+            _parse_yaml_config("/nonexistent/config.yaml")

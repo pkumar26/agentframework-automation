@@ -53,8 +53,7 @@ A multi-agent platform built on **Microsoft Agent Framework** with models infere
 # Clone and install
 git clone https://github.com/pkumar26/agentframework-automation.git
 cd agentframework-automation
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+uv sync --group dev
 
 # Configure
 cp .env.example .env

@@ -4,6 +4,7 @@ import os
 from unittest.mock import patch
 
 import pytest
+from pydantic import ValidationError
 
 from agents._base.config import AgentBaseConfig
 
@@ -32,5 +33,5 @@ class TestAgentBaseConfig:
     def test_missing_required_field_raises(self):
         """Config should fail when required fields are missing."""
         with patch.dict(os.environ, {}, clear=True):
-            with pytest.raises(Exception):
+            with pytest.raises(ValidationError):
                 AgentBaseConfig(_env_file=None)

@@ -20,6 +20,8 @@ PYPROJECT_PATH = REPO_ROOT / "pyproject.toml"
 AGENTS_DIR = REPO_ROOT / "agents"
 TESTS_DIR = REPO_ROOT / "tests"
 
+BUILTIN_AGENTS = {"code-helper", "doc-assistant"}
+
 PREFIX = "[delete]"
 
 
@@ -227,11 +229,19 @@ def delete_agent(
     # Remove directories
     agent_dir = _agents_dir / module_name
     if remove_directory(agent_dir):
-        _success(f"Removed {agent_dir.relative_to(REPO_ROOT)}")
+        try:
+            rel = agent_dir.relative_to(REPO_ROOT)
+        except ValueError:
+            rel = agent_dir
+        _success(f"Removed {rel}")
 
     test_dir = _tests_dir / module_name
     if remove_directory(test_dir):
-        _success(f"Removed {test_dir.relative_to(REPO_ROOT)}")
+        try:
+            rel = test_dir.relative_to(REPO_ROOT)
+        except ValueError:
+            rel = test_dir
+        _success(f"Removed {rel}")
 
     # Remove registry entry
     if remove_registry_entry(name, module_name, config_class_name, registry_path):
@@ -252,8 +262,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.delete_all:
         names = _get_all_agent_names()
+        names = [n for n in names if n not in BUILTIN_AGENTS]
         if not names:
-            _error("No agents found in registry")
+            _error("No scaffolded agents found in registry (built-in agents are excluded)")
             return 1
         results = []
         for name in names:

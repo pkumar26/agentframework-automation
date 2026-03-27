@@ -1,12 +1,11 @@
 FROM python:3.12-slim
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
 COPY . .
-RUN pip install --no-cache-dir -e .
+RUN uv pip install --system --no-cache -e .
 
 EXPOSE 8088
 

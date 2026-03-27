@@ -74,8 +74,14 @@ def _collect_agent_tools(config: AgentBaseConfig) -> list:
     Looks for a TOOLS list in agents.{module_name}.tools.
     Agent Framework auto-wraps plain functions as function tools.
     """
-    module_name = config.agent_name.replace("-", "_")
-    tools_module_path = f"agents.{module_name}.tools"
+    # Derive tools module from config class location when possible
+    config_module = getattr(type(config), "__module__", "")
+    if config_module.startswith("agents.") and config_module.endswith(".config"):
+        agent_package = config_module.rsplit(".", 1)[0]
+        tools_module_path = f"{agent_package}.tools"
+    else:
+        module_name = config.agent_name.replace("-", "_")
+        tools_module_path = f"agents.{module_name}.tools"
 
     try:
         tools_module = importlib.import_module(tools_module_path)

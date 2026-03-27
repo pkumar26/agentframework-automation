@@ -11,7 +11,7 @@
 ## Prerequisites
 
 - **Python 3.11+**
-- The repository cloned and dependencies installed (`pip install -e .`)
+- The repository cloned and dependencies installed (`uv sync`)
 - No additional packages required — the script uses only the Python standard library
 
 ## Quick Start
@@ -23,17 +23,30 @@ python scripts/create_agent.py --name my-agent
 
 Output:
 ```
-[scaffold] ✓ Agent 'my-agent' scaffolded successfully
-[scaffold]   Created: agents/my_agent/
-[scaffold]   Created: tests/my_agent/
-[scaffold]   Updated: agents/registry.py
-[scaffold]   Files generated: 13
-[scaffold]
-[scaffold]   Next steps:
-[scaffold]   1. Edit agents/my_agent/instructions.md with agent instructions
-[scaffold]   2. Add custom tools in agents/my_agent/tools/
-[scaffold]   3. Run tests: pytest tests/my_agent/ -v
-[scaffold]   4. Run: python scripts/run_agent.py --name my-agent
+[scaffold] Creating agent 'my-agent'...
+[scaffold]   ✓ agents/my_agent/__init__.py
+[scaffold]   ✓ agents/my_agent/config.py
+[scaffold]   ✓ agents/my_agent/instructions.md
+[scaffold]   ✓ agents/my_agent/README.md
+[scaffold]   ✓ agents/my_agent/tools/__init__.py
+[scaffold]   ✓ agents/my_agent/tools/sample_tool.py
+[scaffold]   ✓ agents/my_agent/integrations/__init__.py
+[scaffold]   ✓ agents/my_agent/integrations/knowledge.py
+[scaffold]   ✓ tests/my_agent/__init__.py
+[scaffold]   ✓ tests/my_agent/conftest.py
+[scaffold]   ✓ tests/my_agent/test_tools.py
+[scaffold]   ✓ tests/my_agent/test_agent_create.py
+[scaffold]   ✓ tests/my_agent/test_agent_run.py
+[scaffold]   ✓ agents/registry.py (entry added)
+[scaffold]   ✓ pyproject.toml (marker added)
+
+[scaffold] ✓ Agent 'my-agent' scaffolded successfully!
+
+[scaffold] Next steps:
+[scaffold]   1. Edit agents/my_agent/instructions.md
+[scaffold]   2. Add tools in agents/my_agent/tools/
+[scaffold]   3. Run: python scripts/run_agent.py --name my-agent
+[scaffold]   4. Test: pytest tests/my_agent/ -v
 ```
 
 ## CLI Reference
@@ -64,7 +77,6 @@ usage: create_agent.py [-h] (--name NAME | --from-file FROM_FILE) [--model MODEL
 |------|---------|
 | 0 | Success |
 | 1 | Validation error (invalid name, agent exists) |
-| 2 | Filesystem error (permission denied, write failure) |
 
 ## YAML Input Reference
 
@@ -191,11 +203,11 @@ AGENT_NAME=my-agent python app.py
 Use the deletion script:
 
 ```bash
-# With confirmation prompt
+# Delete a single agent
 python scripts/delete_agent.py --name my-agent
 
-# Skip confirmation
-python scripts/delete_agent.py --name my-agent --force
+# Delete all scaffolded agents (built-in agents are excluded)
+python scripts/delete_agent.py --all
 ```
 
 This removes: (1) the agent directory `agents/{module_name}/`, (2) the test directory `tests/{module_name}/`, (3) the import and `AgentRegistryEntry` in `agents/registry.py`.

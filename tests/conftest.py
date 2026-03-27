@@ -13,7 +13,7 @@ def mock_config():
     config.environment = "dev"
     config.agent_name = "test-agent"
     config.agent_deployment_name = "gpt-4o"
-    config.agent_instructions_path = "agents/code_helper/instructions.md"
+    config.agent_instructions_path = "test-agent/instructions.md"
     return config
 
 
