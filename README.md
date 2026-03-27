@@ -147,8 +147,29 @@ az acr login --name <your-registry>
 docker build -t <your-registry>.azurecr.io/code-helper:v1 .
 docker push <your-registry>.azurecr.io/code-helper:v1
 
-# Deploy to ACA (see infra/ for IaC templates)
+# Deploy to ACA
+az containerapp create \
+  --name code-helper \
+  --resource-group <rg> \
+  --environment <aca-env> \
+  --image <your-registry>.azurecr.io/code-helper:v1 \
+  --target-port 8088 \
+  --ingress external \
+  --env-vars AGENT_NAME=code-helper AZURE_AI_PROJECT_ENDPOINT=<endpoint>
 ```
+
+See the [Deployment Guide](docs/deployment-guide.md) for full ACA setup, managed identity, multi-agent deployment, and troubleshooting.
+
+## Agent Documentation
+
+- **[Code Helper](agents/code_helper/README.md)** — Tool-augmented coding assistant for debugging, code review, and technical Q&A
+- **[Doc Assistant](agents/doc_assistant/README.md)** — Instruction-only documentation specialist for READMEs, API docs, and technical writing
+
+## Guides
+
+- **[Deployment Guide](docs/deployment-guide.md)** — Local, Docker, and Azure Container Apps deployment (setup, authentication, multi-agent, troubleshooting)
+- **[Scaffolding Guide](docs/scaffolding-guide.md)** — YAML format, customisation, and FAQ for agent scaffolding
+- **[Custom Tools Guide](docs/custom-tools-guide.md)** — How to write, test, and run custom Python tool functions
 
 ## Testing
 
