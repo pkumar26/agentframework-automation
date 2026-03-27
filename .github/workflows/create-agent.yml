@@ -1,0 +1,90 @@
+name: Create Agent
+
+on:
+  workflow_dispatch:
+    inputs:
+      agent_name:
+        description: "Agent name in kebab-case (e.g., my-agent)"
+        required: true
+        type: string
+      model:
+        description: "Model name for the agent"
+        required: false
+        default: "gpt-4o"
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  scaffold-agent:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      AGENT_NAME: ${{ inputs.agent_name }}
+      AGENT_MODEL: ${{ inputs.model }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install project
+        run: pip install -e .
+
+      - name: Validate agent name
+        run: |
+          python -c "
+          import os, sys
+          from scripts.create_agent import validate_name
+          name = os.environ['AGENT_NAME']
+          err = validate_name(name)
+          if err:
+              print(f'[validate] ✗ {err}', file=sys.stderr)
+              sys.exit(1)
+          print(f'[validate] Agent name {name!r} is valid')
+          "
+
+      - name: Run scaffolding script
+        run: python scripts/create_agent.py --name "$AGENT_NAME" --model "$AGENT_MODEL"
+
+      - name: Create branch and commit
+        run: |
+          BRANCH_NAME="scaffold/$AGENT_NAME"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Delete remote branch if it exists (from a previous failed run)
+          git push origin --delete "$BRANCH_NAME" 2>/dev/null || true
+
+          git checkout -b "$BRANCH_NAME"
+          git add .
+          git commit -m "feat: scaffold agent $AGENT_NAME"
+          git push origin "$BRANCH_NAME"
+
+      - name: Create pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MODULE_NAME=$(echo "$AGENT_NAME" | tr '-' '_')
+          gh pr create \
+            --title "feat: add agent $AGENT_NAME" \
+            --body "## New Agent: $AGENT_NAME
+
+          Scaffolded via GitHub Actions workflow.
+
+          ### Generated Files
+          - \`agents/$MODULE_NAME/\` — agent code
+          - \`tests/$MODULE_NAME/\` — test stubs
+          - \`agents/registry.py\` — updated with new entry
+
+          ### Next Steps
+          1. Review and customise \`instructions.md\`
+          2. Add custom tools
+          3. Run tests: \`pytest tests/$MODULE_NAME/ -v\`
+          4. Merge when ready" \
+            --base main

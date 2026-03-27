@@ -183,6 +183,44 @@ pytest tests/ -v -m "not integration"
 pytest tests/ -v -m integration
 ```
 
+## CI/CD
+
+[![GitHub Actions](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](https://github.com/features/actions)
+
+| Pipeline | Trigger | Purpose |
+|----------|---------|---------|
+| `test.yml` | PR + push to main | Lint (Black, isort, flake8) + unit tests |
+| `deploy.yml` | Push to main (dev auto) / manual dispatch (qa/prod) | Build image → push to ACR → deploy to ACA → integration tests |
+| `create-agent.yml` | Manual dispatch | Scaffold new agent + open PR |
+
+### Workflow Dispatch Inputs
+
+**deploy.yml** (manual dispatch for qa/prod):
+
+| Input | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `environment` | yes | `dev` | Target environment: `dev`, `qa`, or `prod` |
+| `agent_name` | no | `all` | Deploy a specific agent or `all` |
+
+**create-agent.yml**:
+
+| Input | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `agent_name` | yes | — | Agent name in kebab-case |
+| `model` | no | `gpt-4o` | Model deployment name |
+
+### Required Secrets & Variables
+
+| Type | Name | Description |
+|------|------|-------------|
+| Secret | `AZURE_CLIENT_ID_DEV` / `_QA` / `_PROD` | Per-environment service principal client ID |
+| Secret | `AZURE_TENANT_ID` | Azure AD tenant ID |
+| Secret | `AZURE_SUBSCRIPTION_ID` | Azure subscription ID |
+| Variable | `AZURE_AI_PROJECT_ENDPOINT` | Foundry project endpoint URL |
+| Variable | `ACR_NAME` | Azure Container Registry name |
+| Variable | `ACA_RESOURCE_GROUP` | ACA resource group |
+| Variable | `ACA_ENVIRONMENT` | ACA environment name |
+
 ## License
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)

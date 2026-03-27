@@ -1,0 +1,137 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options:
+          - dev
+          - qa
+          - prod
+      agent_name:
+        description: "Agent to deploy (name or 'all')"
+        type: string
+        default: "all"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'dev' }}
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      ENVIRONMENT: ${{ inputs.environment || 'dev' }}
+      AGENT_NAME: ${{ inputs.agent_name || 'all' }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -e .
+
+      # Stage 1: Validate agent target
+      - name: Validate agent target
+        if: env.AGENT_NAME != 'all'
+        run: |
+          python -c "
+          import os, sys
+          from agents.registry import REGISTRY
+          target = os.environ['AGENT_NAME']
+          try:
+              REGISTRY.get_agent(target)
+              print(f'[validate] Agent {target!r} found in registry')
+          except KeyError as e:
+              print(f'[validate] ✗ {e}', file=sys.stderr)
+              sys.exit(1)
+          "
+
+      # Compute uppercase environment suffix for per-env secrets
+      - name: Resolve environment suffix
+        id: env-suffix
+        run: echo "suffix=$(echo '${{ env.ENVIRONMENT }}' | tr '[:lower:]' '[:upper:]')" >> "$GITHUB_OUTPUT"
+
+      # Stage 2: Azure login via OIDC
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets[format('AZURE_CLIENT_ID_{0}', steps.env-suffix.outputs.suffix)] }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # Stage 3: Build and push container image to ACR
+      - name: Login to ACR
+        run: az acr login --name ${{ vars.ACR_NAME }}
+
+      - name: Build and push image
+        run: |
+          IMAGE="${{ vars.ACR_NAME }}.azurecr.io/agentframework:${{ github.sha }}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+
+      # Stage 4: Deploy container app(s)
+      - name: Deploy agent(s) to ACA
+        env:
+          AZURE_AI_PROJECT_ENDPOINT: ${{ vars.AZURE_AI_PROJECT_ENDPOINT }}
+        run: |
+          deploy_agent() {
+            local name="$1"
+            echo "[deploy] Deploying agent: $name"
+            az containerapp update \
+              --name "$name" \
+              --resource-group "${{ vars.ACA_RESOURCE_GROUP }}" \
+              --image "$IMAGE" \
+              --set-env-vars \
+                AGENT_NAME="$name" \
+                AZURE_AI_PROJECT_ENDPOINT="${AZURE_AI_PROJECT_ENDPOINT}" \
+                ENVIRONMENT="${ENVIRONMENT}" \
+              2>/dev/null || \
+            az containerapp create \
+              --name "$name" \
+              --resource-group "${{ vars.ACA_RESOURCE_GROUP }}" \
+              --environment "${{ vars.ACA_ENVIRONMENT }}" \
+              --image "$IMAGE" \
+              --registry-server "${{ vars.ACR_NAME }}.azurecr.io" \
+              --target-port 8088 \
+              --ingress external \
+              --min-replicas 1 \
+              --max-replicas 3 \
+              --cpu 0.5 \
+              --memory 1Gi \
+              --env-vars \
+                AGENT_NAME="$name" \
+                AZURE_AI_PROJECT_ENDPOINT="${AZURE_AI_PROJECT_ENDPOINT}" \
+                ENVIRONMENT="${ENVIRONMENT}"
+            echo "[deploy] ✓ $name deployed"
+          }
+
+          if [ "$AGENT_NAME" = "all" ]; then
+            AGENTS=$(python -c "from agents.registry import REGISTRY; print(' '.join(REGISTRY.list_agents()))")
+            for agent in $AGENTS; do
+              deploy_agent "$agent"
+            done
+          else
+            deploy_agent "$AGENT_NAME"
+          fi
+
+      # Stage 5: Run integration tests
+      - name: Install test dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run integration tests
+        env:
+          AZURE_AI_PROJECT_ENDPOINT: ${{ vars.AZURE_AI_PROJECT_ENDPOINT }}
+        run: pytest tests/ -m integration -v
