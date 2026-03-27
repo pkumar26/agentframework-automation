@@ -13,7 +13,9 @@ dependencies = [
     "agent-framework",
     "azure-identity>=1.15.0",
     "pydantic-settings>=2.0.0",
-    "azure-ai-agentserver-agentframework",
+    "azure-ai-agentserver-agentframework>=1.0.0b1",
+    "azure-ai-agents>=1.2.0b5",
+    "azure-ai-agentserver-core>=1.0.0b7",
 ]
 
 [dependency-groups]
@@ -26,6 +28,9 @@ dev = [
     "ipykernel>=6.29.0",
     "python-dotenv>=1.0.0",
 ]
+
+[tool.uv]
+prerelease = "if-necessary-or-explicit"
 
 [tool.setuptools.packages.find]
 include = ["agents*", "scripts*"]
