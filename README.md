@@ -165,6 +165,16 @@ See the [Deployment Guide](docs/deployment-guide.md) for full ACA setup, managed
 - **[Code Helper](agents/code_helper/README.md)** — Tool-augmented coding assistant for debugging, code review, and technical Q&A
 - **[Doc Assistant](agents/doc_assistant/README.md)** — Instruction-only documentation specialist for READMEs, API docs, and technical writing
 
+## Notebooks
+
+Interactive Jupyter notebooks for hands-on exploration:
+
+| Notebook | Description |
+|----------|-------------|
+| [01_setup_and_connect.ipynb](notebooks/01_setup_and_connect.ipynb) | Verify credentials, create a chat client, assemble an agent, and run a smoke test |
+| [02_build_and_run_agent.ipynb](notebooks/02_build_and_run_agent.ipynb) | Inspect tools, send messages, trigger tool calls, multi-turn conversations, and the programmatic API |
+| [03_scaffold_agent.ipynb](notebooks/03_scaffold_agent.ipynb) | Scaffold a new agent, verify files, run tests, run the agent, and clean up |
+
 ## Guides
 
 - **[Deployment Guide](docs/deployment-guide.md)** — Local, Docker, and Azure Container Apps deployment (setup, authentication, multi-agent, troubleshooting)
