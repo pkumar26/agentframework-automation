@@ -17,6 +17,10 @@ on:
         description: "Agent to deploy (name or 'all')"
         type: string
         default: "all"
+      allow_destructive:
+        description: "Allow destructive infrastructure changes"
+        type: boolean
+        default: false
 
 permissions:
   id-token: write
@@ -58,18 +62,13 @@ jobs:
               sys.exit(1)
           "
 
-      # Compute uppercase environment suffix for per-env secrets
-      - name: Resolve environment suffix
-        id: env-suffix
-        run: echo "suffix=$(echo '${{ env.ENVIRONMENT }}' | tr '[:lower:]' '[:upper:]')" >> "$GITHUB_OUTPUT"
-
       # Stage 2: Azure login via OIDC
       - name: Azure Login (OIDC)
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets[format('AZURE_CLIENT_ID_{0}', steps.env-suffix.outputs.suffix)] }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       # Stage 3: Build and push container image to ACR
       - name: Login to ACR
@@ -82,40 +81,75 @@ jobs:
           docker push "$IMAGE"
           echo "IMAGE=$IMAGE" >> $GITHUB_ENV
 
-      # Stage 4: Deploy container app(s)
-      - name: Deploy agent(s) to ACA
+      # Stage 4: Deploy agent(s) via Bicep
+      #
+      # Each agent gets its own Bicep deployment (identity, ACR role,
+      # Log Analytics, ACA environment, container app). The parameter
+      # file provides environment defaults; per-agent overrides are
+      # applied via --parameters on the CLI.
+      #
+      # Resources use deterministic names (e.g., ca-{appName}-{env})
+      # so re-running is idempotent.
+      #
+      # Infrastructure: https://github.com/pkumar26/ACA-BICEP-Actions
+      - name: Deploy agent(s) to ACA via Bicep
         env:
           AZURE_AI_PROJECT_ENDPOINT: ${{ vars.AZURE_AI_PROJECT_ENDPOINT }}
         run: |
+          PARAM_FILE="infra/parameters.${ENVIRONMENT}.bicepparam"
+
           deploy_agent() {
             local name="$1"
+            echo ""
+            echo "=============================================="
             echo "[deploy] Deploying agent: $name"
-            az containerapp update \
-              --name "$name" \
-              --resource-group "${{ vars.ACA_RESOURCE_GROUP }}" \
-              --image "$IMAGE" \
-              --set-env-vars \
-                AGENT_NAME="$name" \
-                AZURE_AI_PROJECT_ENDPOINT="${AZURE_AI_PROJECT_ENDPOINT}" \
-                ENVIRONMENT="${ENVIRONMENT}" \
-              2>/dev/null || \
-            az containerapp create \
-              --name "$name" \
-              --resource-group "${{ vars.ACA_RESOURCE_GROUP }}" \
-              --environment "${{ vars.ACA_ENVIRONMENT }}" \
-              --image "$IMAGE" \
-              --registry-server "${{ vars.ACR_NAME }}.azurecr.io" \
-              --target-port 8088 \
-              --ingress external \
-              --min-replicas 1 \
-              --max-replicas 3 \
-              --cpu 0.5 \
-              --memory 1Gi \
-              --env-vars \
-                AGENT_NAME="$name" \
-                AZURE_AI_PROJECT_ENDPOINT="${AZURE_AI_PROJECT_ENDPOINT}" \
-                ENVIRONMENT="${ENVIRONMENT}"
-            echo "[deploy] ✓ $name deployed"
+            echo "=============================================="
+
+            DEPLOY_NAME="agent-${name}-${ENVIRONMENT}-$(date +%Y%m%d%H%M%S)"
+
+            # What-if preview
+            echo "[deploy] Running what-if preview..."
+            WHATIF_OUTPUT=$(az deployment group what-if \
+              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --template-file infra/main.bicep \
+              --parameters "$PARAM_FILE" \
+              --parameters appName="$name" \
+              --parameters containerImage="$IMAGE" \
+              --parameters "appEnvVars=[{\"name\":\"AGENT_NAME\",\"value\":\"${name}\"},{\"name\":\"AZURE_AI_PROJECT_ENDPOINT\",\"value\":\"${AZURE_AI_PROJECT_ENDPOINT}\"},{\"name\":\"ENVIRONMENT\",\"value\":\"${ENVIRONMENT}\"}]" \
+              --no-pretty-print 2>&1) || true
+
+            echo "$WHATIF_OUTPUT"
+
+            # Destructive change gate
+            if echo "$WHATIF_OUTPUT" | grep -qi "Delete"; then
+              if [ "${{ inputs.allow_destructive }}" != "true" ]; then
+                echo "::error::[deploy] ✗ $name — what-if detected resource deletions. Set allow_destructive=true to override."
+                exit 1
+              fi
+              echo "::warning::[deploy] $name — destructive changes detected but allow_destructive=true, proceeding."
+            fi
+
+            # Deploy
+            echo "[deploy] Deploying infrastructure..."
+            az deployment group create \
+              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --template-file infra/main.bicep \
+              --parameters "$PARAM_FILE" \
+              --parameters appName="$name" \
+              --parameters containerImage="$IMAGE" \
+              --parameters "appEnvVars=[{\"name\":\"AGENT_NAME\",\"value\":\"${name}\"},{\"name\":\"AZURE_AI_PROJECT_ENDPOINT\",\"value\":\"${AZURE_AI_PROJECT_ENDPOINT}\"},{\"name\":\"ENVIRONMENT\",\"value\":\"${ENVIRONMENT}\"}]" \
+              --name "$DEPLOY_NAME" \
+              --mode Incremental
+
+            # Capture outputs
+            OUTPUTS=$(az deployment group show \
+              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --name "$DEPLOY_NAME" \
+              --query "properties.outputs" \
+              --output json)
+
+            FQDN=$(echo "$OUTPUTS" | jq -r '.containerAppFqdn.value')
+            echo "[deploy] ✓ $name deployed → https://$FQDN"
           }
 
           if [ "$AGENT_NAME" = "all" ]; then

@@ -118,6 +118,17 @@ agentframework-automation/
 │   └── doc_assistant/         # Example: instruction-only agent
 │       ├── config.py
 │       └── instructions.md
+├── infra/                     # Bicep infrastructure (from ACA-BICEP-Actions)
+│   ├── main.bicep             # Orchestrator — wires all modules
+│   ├── modules/
+│   │   ├── identity.bicep     # Conditional UAMI creation
+│   │   ├── acr-role-assignment.bicep  # AcrPull role (cross-RG)
+│   │   ├── log-analytics.bicep        # Log Analytics workspace
+│   │   ├── managed-environment.bicep  # ACA environment (optional VNET)
+│   │   └── container-app.bicep        # Container app with KV secrets
+│   ├── parameters.dev.bicepparam
+│   ├── parameters.qa.bicepparam
+│   └── parameters.prod.bicepparam
 ├── scripts/
 │   ├── run_agent.py           # CLI for local execution
 │   ├── create_agent.py        # Scaffold a new agent
@@ -137,28 +148,40 @@ python scripts/create_agent.py --name my-agent
 python scripts/delete_agent.py --name my-agent
 ```
 
-## Deploy to Azure Container Apps
+## Infrastructure
 
+![Bicep](https://img.shields.io/badge/Bicep-IaC-0078D4?logo=microsoftazure&logoColor=white)
 ![Azure Container Apps](https://img.shields.io/badge/Azure-Container%20Apps-0078D4?logo=microsoftazure&logoColor=white)
 
-```bash
-# Build and push container image
-az acr login --name <your-registry>
-docker build -t <your-registry>.azurecr.io/code-helper:v1 .
-docker push <your-registry>.azurecr.io/code-helper:v1
+Infrastructure is managed declaratively with [Bicep](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/) modules sourced from [ACA-BICEP-Actions](https://github.com/pkumar26/ACA-BICEP-Actions). Each agent deployment provisions:
 
-# Deploy to ACA
-az containerapp create \
-  --name code-helper \
+| Resource | Naming | Purpose |
+|----------|--------|---------|
+| User-Assigned Managed Identity | `id-{agent}-{env}` | ACR pull + Key Vault access |
+| ACRPull Role Assignment | deterministic GUID | Identity-based image pull (cross-RG) |
+| Log Analytics Workspace | `law-{agent}-{env}` | Container app logging |
+| ACA Managed Environment | `cae-{agent}-{env}` | Container Apps runtime (optional VNET) |
+| Container App | `ca-{agent}-{env}` | Agent HTTP service on port 8088 |
+
+```bash
+# Validate (dry run)
+az deployment group what-if \
   --resource-group <rg> \
-  --environment <aca-env> \
-  --image <your-registry>.azurecr.io/code-helper:v1 \
-  --target-port 8088 \
-  --ingress external \
-  --env-vars AGENT_NAME=code-helper AZURE_AI_PROJECT_ENDPOINT=<endpoint>
+  --template-file infra/main.bicep \
+  --parameters infra/parameters.dev.bicepparam \
+  --parameters appName=code-helper containerImage=<acr>.azurecr.io/agentframework:v1
+
+# Deploy
+az deployment group create \
+  --resource-group <rg> \
+  --template-file infra/main.bicep \
+  --parameters infra/parameters.dev.bicepparam \
+  --parameters appName=code-helper containerImage=<acr>.azurecr.io/agentframework:v1 \
+  --parameters 'appEnvVars=[{"name":"AGENT_NAME","value":"code-helper"},{"name":"AZURE_AI_PROJECT_ENDPOINT","value":"<endpoint>"}]' \
+  --mode Incremental
 ```
 
-See the [Deployment Guide](docs/deployment-guide.md) for full ACA setup, managed identity, multi-agent deployment, and troubleshooting.
+See the [Deployment Guide](docs/deployment-guide.md) for full setup, managed identity, multi-agent deployment, and troubleshooting.
 
 ## Agent Documentation
 
@@ -200,7 +223,8 @@ pytest tests/ -v -m integration
 | Pipeline | Trigger | Purpose |
 |----------|---------|---------|
 | `test.yml` | PR + push to main | Lint (Black, isort, flake8) + unit tests |
-| `deploy.yml` | Push to main (dev auto) / manual dispatch (qa/prod) | Build image → push to ACR → deploy to ACA → integration tests |
+| `deploy.yml` | Push to main (dev auto) / manual dispatch (qa/prod) | Build image → push to ACR → Bicep deploy to ACA → integration tests |
+| `infra-deploy.yml` | Reusable (`workflow_call`) | Standalone infrastructure deployment (what-if + deploy + outputs) |
 | `create-agent.yml` | Manual dispatch | Scaffold new agent + open PR |
 
 ### Workflow Dispatch Inputs
@@ -211,6 +235,7 @@ pytest tests/ -v -m integration
 |-------|----------|---------|-------------|
 | `environment` | yes | `dev` | Target environment: `dev`, `qa`, or `prod` |
 | `agent_name` | no | `all` | Deploy a specific agent or `all` |
+| `allow_destructive` | no | `false` | Allow Bicep deployments that delete resources |
 
 **create-agent.yml**:
 
@@ -221,14 +246,18 @@ pytest tests/ -v -m integration
 
 ### Required Secrets & Variables
 
+Secrets are configured per GitHub Environment (`dev`, `qa`, `prod`):
+
 | Type | Name | Description |
 |------|------|-------------|
-| Secret | `AZURE_CLIENT_ID_DEV` / `_QA` / `_PROD` | Per-environment service principal client ID |
+| Secret | `AZURE_CLIENT_ID` | Service principal client ID (per-environment) |
 | Secret | `AZURE_TENANT_ID` | Azure AD tenant ID |
-| Secret | `AZURE_SUBSCRIPTION_ID` | Azure subscription ID |
+| Variable | `AZURE_SUBSCRIPTION_ID` | Azure subscription ID |
 | Variable | `AZURE_AI_PROJECT_ENDPOINT` | Foundry project endpoint URL |
 | Variable | `ACR_NAME` | Azure Container Registry name |
-| Variable | `ACA_RESOURCE_GROUP` | ACA resource group |
+| Variable | `AZURE_RESOURCE_GROUP` | Target resource group |
+
+> **OIDC**: Authentication uses Workload Identity Federation — no client secrets. See the [Deployment Guide](docs/deployment-guide.md#authentication) for setup.
 | Variable | `ACA_ENVIRONMENT` | ACA environment name |
 
 ## License

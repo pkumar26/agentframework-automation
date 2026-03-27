@@ -1,0 +1,185 @@
+# =============================================================================
+# Reusable Infrastructure Deployment Workflow
+# =============================================================================
+# Deploys ACA infrastructure (identity, role assignment, Log Analytics,
+# managed environment, container app) using Bicep.
+#
+# This is a reusable workflow — it is NOT triggered directly.
+# Caller workflows invoke this workflow via workflow_call.
+#
+# Sourced from: https://github.com/pkumar26/ACA-BICEP-Actions
+# =============================================================================
+
+name: 'Deploy ACA Infrastructure'
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Target environment name (must match a GitHub Environment).'
+        required: true
+        type: string
+      azure-subscription-id:
+        description: 'Azure subscription ID for the deployment target.'
+        required: true
+        type: string
+      azure-resource-group:
+        description: 'Azure resource group name for the deployment target.'
+        required: true
+        type: string
+      parameter-file:
+        description: 'Relative path to the Bicep parameter file.'
+        required: true
+        type: string
+      container-image-tag:
+        description: 'Container image tag override. Empty = use parameter file default.'
+        required: false
+        type: string
+        default: ''
+      allow-destructive:
+        description: 'Allow deployment even if what-if detects resource deletions.'
+        required: false
+        type: boolean
+        default: false
+    outputs:
+      container-app-name:
+        description: 'Name of the deployed container app.'
+        value: ${{ jobs.deploy.outputs.container-app-name }}
+      container-app-fqdn:
+        description: 'FQDN of the deployed container app.'
+        value: ${{ jobs.deploy.outputs.container-app-fqdn }}
+      container-app-resource-id:
+        description: 'Full ARM resource ID of the deployed container app.'
+        value: ${{ jobs.deploy.outputs.container-app-resource-id }}
+
+permissions:
+  id-token: write    # Required for OIDC federated authentication
+  contents: read     # Required for actions/checkout
+
+jobs:
+  deploy:
+    name: 'Deploy to ${{ inputs.environment }}'
+    runs-on: ubuntu-latest
+
+    # Maps to a GitHub Environment for secrets, variables, and protection rules
+    environment: ${{ inputs.environment }}
+
+    outputs:
+      container-app-name: ${{ steps.outputs.outputs.containerAppName }}
+      container-app-fqdn: ${{ steps.outputs.outputs.containerAppFqdn }}
+      container-app-resource-id: ${{ steps.outputs.outputs.containerAppResourceId }}
+
+    steps:
+      # -----------------------------------------------------------------
+      # 1. Checkout
+      # -----------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------
+      # 2. Azure Login (OIDC / Workload Identity Federation)
+      # -----------------------------------------------------------------
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ inputs.azure-subscription-id }}
+
+      # -----------------------------------------------------------------
+      # 3. What-If Preview + Destructive Change Detection
+      # -----------------------------------------------------------------
+      - name: Preview infrastructure changes (what-if)
+        id: whatif
+        run: |
+          echo "## What-If Preview — ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          WHATIF_OUTPUT=$(az deployment group what-if \
+            --resource-group "${{ inputs.azure-resource-group }}" \
+            --template-file infra/main.bicep \
+            --parameters "${{ inputs.parameter-file }}" \
+            --no-pretty-print 2>&1) || true
+
+          echo "$WHATIF_OUTPUT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          if echo "$WHATIF_OUTPUT" | grep -qi "Delete"; then
+            echo "has_destructive=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::What-if detected resource DELETIONS."
+          else
+            echo "has_destructive=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # -----------------------------------------------------------------
+      # 4. Destructive Change Gate
+      # -----------------------------------------------------------------
+      - name: Abort on destructive changes
+        if: steps.whatif.outputs.has_destructive == 'true' && inputs.allow-destructive != true
+        run: |
+          echo "::error::Deployment aborted — what-if detected resource deletions and allow-destructive is false."
+          echo "To override, re-run with allow-destructive = true."
+          exit 1
+
+      # -----------------------------------------------------------------
+      # 5. Deploy Infrastructure
+      # -----------------------------------------------------------------
+      - name: Deploy infrastructure
+        id: deploy
+        run: |
+          DEPLOY_NAME="aca-infra-${{ inputs.environment }}-$(date +%Y%m%d%H%M%S)"
+
+          DEPLOY_CMD="az deployment group create \
+            --resource-group \"${{ inputs.azure-resource-group }}\" \
+            --template-file infra/main.bicep \
+            --parameters \"${{ inputs.parameter-file }}\" \
+            --name \"${DEPLOY_NAME}\" \
+            --mode Incremental"
+
+          # Override container image tag when provided
+          if [ -n "${{ inputs.container-image-tag }}" ]; then
+            IMAGE_TAG="${{ inputs.container-image-tag }}"
+            DEPLOY_CMD="${DEPLOY_CMD} --parameters containerImage='${IMAGE_TAG}'"
+          fi
+
+          eval $DEPLOY_CMD
+
+      # -----------------------------------------------------------------
+      # 6. Surface Deployment Outputs
+      # -----------------------------------------------------------------
+      - name: Capture deployment outputs
+        id: outputs
+        run: |
+          DEPLOY_NAME=$(az deployment group list \
+            --resource-group "${{ inputs.azure-resource-group }}" \
+            --query "[?starts_with(name, 'aca-infra-${{ inputs.environment }}-')] | sort_by(@, &properties.timestamp) | [-1].name" \
+            --output tsv)
+
+          OUTPUTS=$(az deployment group show \
+            --resource-group "${{ inputs.azure-resource-group }}" \
+            --name "$DEPLOY_NAME" \
+            --query "properties.outputs" \
+            --output json)
+
+          APP_NAME=$(echo "$OUTPUTS" | jq -r '.containerAppName.value')
+          APP_FQDN=$(echo "$OUTPUTS" | jq -r '.containerAppFqdn.value')
+          APP_RESID=$(echo "$OUTPUTS" | jq -r '.containerAppResourceId.value')
+
+          echo "containerAppName=${APP_NAME}" >> "$GITHUB_OUTPUT"
+          echo "containerAppFqdn=${APP_FQDN}" >> "$GITHUB_OUTPUT"
+          echo "containerAppResourceId=${APP_RESID}" >> "$GITHUB_OUTPUT"
+
+          echo "## Deployment Summary — ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | ${{ inputs.environment }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Container App | ${APP_NAME} |" >> $GITHUB_STEP_SUMMARY
+          echo "| FQDN | ${APP_FQDN} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Resource ID | ${APP_RESID} |" >> $GITHUB_STEP_SUMMARY
+
+      # -----------------------------------------------------------------
+      # 7. Azure Logout
+      # -----------------------------------------------------------------
+      - name: Azure Logout
+        if: always()
+        run: az logout

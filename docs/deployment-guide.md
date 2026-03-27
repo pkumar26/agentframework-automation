@@ -16,12 +16,12 @@ This guide covers how to deploy agents — locally, in Docker, and to Azure Cont
 - [Docker](#docker)
 - [Azure Container Apps](#azure-container-apps)
   - [Prerequisites](#prerequisites)
-  - [1. Create Container Registry](#1-create-container-registry)
+  - [1. Create Resource Group and ACR](#1-create-resource-group-and-acr)
   - [2. Build and Push Image](#2-build-and-push-image)
-  - [3. Create Container App Environment](#3-create-container-app-environment)
-  - [4. Deploy the Container App](#4-deploy-the-container-app)
-  - [5. Verify Deployment](#5-verify-deployment)
-  - [6. Update a Deployment](#6-update-a-deployment)
+  - [3. Deploy via Bicep](#3-deploy-via-bicep)
+  - [4. Verify Deployment](#4-verify-deployment)
+  - [5. Update a Deployment](#5-update-a-deployment)
+- [Bicep Parameter Reference](#bicep-parameter-reference)
 - [Environment Configuration](#environment-configuration)
 - [Authentication](#authentication)
 - [Multiple Agents](#multiple-agents)
@@ -113,13 +113,16 @@ curl -X POST http://localhost:8088/responses \
 
 ### Prerequisites
 
-- **Azure CLI** >= 2.60 — [Install](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli)
+- **Azure CLI** >= 2.60 with Bicep extension — [Install](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli)
 - **Azure subscription** with permissions to create resources
 - Authenticated session: `az login`
 - An **Azure AI Foundry project** with a model deployment (e.g., `gpt-4o`)
-- A **service principal** or **managed identity** with access to the Foundry endpoint
+- An **existing Azure Container Registry** (can be in any resource group)
+- **Contributor** + **User Access Administrator** roles on the target resource group (for Bicep to create resources and assign roles)
 
-### 1. Create Container Registry
+### 1. Create Resource Group and ACR
+
+These are external prerequisites — created once, referenced by the Bicep templates:
 
 ```bash
 # Variables
@@ -155,55 +158,61 @@ docker build -t "$ACR_NAME.azurecr.io/agentframework:v1" .
 docker push "$ACR_NAME.azurecr.io/agentframework:v1"
 ```
 
-### 3. Create Container App Environment
+### 3. Deploy via Bicep
 
-```bash
-ACA_ENV="agentframework-env"
+The `infra/` directory contains modular Bicep templates sourced from [ACA-BICEP-Actions](https://github.com/pkumar26/ACA-BICEP-Actions). A single deployment provisions everything: managed identity, ACR role assignment, Log Analytics, ACA environment, and the container app.
 
-az containerapp env create \
-  --name "$ACA_ENV" \
-  --resource-group "$RG" \
-  --location "$LOCATION"
+**First, update your parameter file** (`infra/parameters.dev.bicepparam`):
+
+```bicep
+// Set your actual ACR resource ID
+param acrResourceId = '/subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.ContainerRegistry/registries/<acr-name>'
 ```
 
-### 4. Deploy the Container App
+**Preview changes (what-if):**
 
 ```bash
-ACA_NAME="code-helper"
-FOUNDRY_ENDPOINT="https://your-project.services.ai.azure.com/api/projects/your-project"
+AGENT="code-helper"
+IMAGE="$ACR_NAME.azurecr.io/agentframework:v1"
+ENDPOINT="https://your-project.services.ai.azure.com/api/projects/your-project"
 
-az containerapp create \
-  --name "$ACA_NAME" \
+az deployment group what-if \
   --resource-group "$RG" \
-  --environment "$ACA_ENV" \
-  --image "$ACR_NAME.azurecr.io/agentframework:v1" \
-  --registry-server "$ACR_NAME.azurecr.io" \
-  --target-port 8088 \
-  --ingress external \
-  --min-replicas 1 \
-  --max-replicas 3 \
-  --cpu 0.5 \
-  --memory 1Gi \
-  --env-vars \
-    AGENT_NAME=code-helper \
-    AZURE_AI_PROJECT_ENDPOINT="$FOUNDRY_ENDPOINT" \
-    AZURE_CLIENT_ID=secretref:azure-client-id \
-    AZURE_CLIENT_SECRET=secretref:azure-client-secret \
-    AZURE_TENANT_ID=secretref:azure-tenant-id \
-  --secrets \
-    azure-client-id="<your-client-id>" \
-    azure-client-secret="<your-client-secret>" \
-    azure-tenant-id="<your-tenant-id>"
+  --template-file infra/main.bicep \
+  --parameters infra/parameters.dev.bicepparam \
+  --parameters appName="$AGENT" \
+  --parameters containerImage="$IMAGE" \
+  --parameters "appEnvVars=[{\"name\":\"AGENT_NAME\",\"value\":\"$AGENT\"},{\"name\":\"AZURE_AI_PROJECT_ENDPOINT\",\"value\":\"$ENDPOINT\"},{\"name\":\"ENVIRONMENT\",\"value\":\"dev\"}]"
 ```
 
-> **Tip:** For production, use **managed identity** instead of service principal secrets. See [Authentication](#authentication).
-
-### 5. Verify Deployment
+**Deploy:**
 
 ```bash
-# Get the FQDN
+az deployment group create \
+  --resource-group "$RG" \
+  --template-file infra/main.bicep \
+  --parameters infra/parameters.dev.bicepparam \
+  --parameters appName="$AGENT" \
+  --parameters containerImage="$IMAGE" \
+  --parameters "appEnvVars=[{\"name\":\"AGENT_NAME\",\"value\":\"$AGENT\"},{\"name\":\"AZURE_AI_PROJECT_ENDPOINT\",\"value\":\"$ENDPOINT\"},{\"name\":\"ENVIRONMENT\",\"value\":\"dev\"}]" \
+  --name "agent-$AGENT-dev-$(date +%Y%m%d%H%M)" \
+  --mode Incremental
+```
+
+This creates all required resources with deterministic names (e.g., `ca-code-helper-dev`, `id-code-helper-dev`). Re-running is idempotent — existing resources are updated in place.
+
+### 4. Verify Deployment
+
+```bash
+# Get the FQDN from deployment outputs
+FQDN=$(az deployment group show \
+  --resource-group "$RG" \
+  --name "<deployment-name>" \
+  --query "properties.outputs.containerAppFqdn.value" -o tsv)
+
+# Or query the container app directly
 FQDN=$(az containerapp show \
-  --name "$ACA_NAME" \
+  --name "ca-$AGENT-dev" \
   --resource-group "$RG" \
   --query "properties.configuration.ingress.fqdn" -o tsv)
 
@@ -213,18 +222,56 @@ curl -X POST "https://$FQDN/responses" \
   -d '{"input": "Hello!"}'
 ```
 
-### 6. Update a Deployment
+### 5. Update a Deployment
 
 ```bash
 # Push a new image version
 az acr build --registry "$ACR_NAME" --image agentframework:v2 .
 
-# Update the container app
-az containerapp update \
-  --name "$ACA_NAME" \
+# Re-run the Bicep deployment with the new image
+az deployment group create \
   --resource-group "$RG" \
-  --image "$ACR_NAME.azurecr.io/agentframework:v2"
+  --template-file infra/main.bicep \
+  --parameters infra/parameters.dev.bicepparam \
+  --parameters appName="$AGENT" containerImage="$ACR_NAME.azurecr.io/agentframework:v2" \
+  --parameters "appEnvVars=[{\"name\":\"AGENT_NAME\",\"value\":\"$AGENT\"},{\"name\":\"AZURE_AI_PROJECT_ENDPOINT\",\"value\":\"$ENDPOINT\"},{\"name\":\"ENVIRONMENT\",\"value\":\"dev\"}]" \
+  --mode Incremental
 ```
+
+Bicep handles the rolling update — ACA provisions a new revision with the new image.
+
+---
+
+## Bicep Parameter Reference
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `environmentName` | `string` | — | `dev`, `qa`, or `prod` |
+| `appName` | `string` | — | Base name for all resources (agent name) |
+| `location` | `string` | Resource group location | Azure region |
+| `createNewIdentity` | `bool` | `true` | Create new managed identity or use existing |
+| `existingIdentityResourceId` | `string` | `''` | Resource ID of existing identity |
+| `acrResourceId` | `string` | — | Full ARM resource ID of your ACR |
+| `existingManagedEnvironmentId` | `string` | `''` | Reuse existing ACA environment (empty = create new) |
+| `subnetId` | `string` | `''` | Subnet ID for VNET integration (empty = no VNET) |
+| `containerImage` | `string` | quickstart | Full image reference |
+| `targetPort` | `int` | `8088` | Port the container listens on |
+| `containerCpu` | `string` | varies by env | CPU cores |
+| `containerMemory` | `string` | varies by env | Memory |
+| `minReplicas` | `int` | varies by env | Minimum replica count |
+| `maxReplicas` | `int` | varies by env | Maximum replica count |
+| `ingressExternal` | `bool` | `true` | Expose external HTTP endpoint |
+| `appEnvVars` | `array` | `[]` | Non-sensitive env vars (`{ name, value }`) |
+| `secretEnvVars` | `array` | `[]` | Key Vault secret refs (`{ name, secretRef, keyVaultSecretUri }`) |
+
+### Environment Sizing Defaults
+
+| Setting | Dev | QA | Prod |
+|---------|-----|----|------|
+| CPU | 0.25 | 0.5 | 1 |
+| Memory | 0.5Gi | 1Gi | 2Gi |
+| Min Replicas | 0 | 1 | 1 |
+| Max Replicas | 1 | 3 | 10 |
 
 ---
 
@@ -296,17 +343,31 @@ The identity (service principal or managed identity) needs access to the Foundry
 
 ## Multiple Agents
 
-Each agent runs as a **separate container app** (or Docker container), all sharing the same image:
+Each agent runs as a **separate container app**, all sharing the same Docker image. With Bicep, each agent gets its own deployment with a unique `appName`:
 
 ```bash
-# Deploy code-helper
-az containerapp create --name code-helper ... --env-vars AGENT_NAME=code-helper ...
+# Deploy code-helper (creates full infra: identity, ACR role, env, container app)
+az deployment group create \
+  --resource-group "$RG" \
+  --template-file infra/main.bicep \
+  --parameters infra/parameters.dev.bicepparam \
+  --parameters appName=code-helper containerImage="$IMAGE" \
+  --parameters "appEnvVars=[{\"name\":\"AGENT_NAME\",\"value\":\"code-helper\"},{\"name\":\"AZURE_AI_PROJECT_ENDPOINT\",\"value\":\"$ENDPOINT\"},{\"name\":\"ENVIRONMENT\",\"value\":\"dev\"}]" \
+  --mode Incremental
 
-# Deploy doc-assistant  
-az containerapp create --name doc-assistant ... --env-vars AGENT_NAME=doc-assistant ...
+# Deploy doc-assistant (creates its own set of resources)
+az deployment group create \
+  --resource-group "$RG" \
+  --template-file infra/main.bicep \
+  --parameters infra/parameters.dev.bicepparam \
+  --parameters appName=doc-assistant containerImage="$IMAGE" \
+  --parameters "appEnvVars=[{\"name\":\"AGENT_NAME\",\"value\":\"doc-assistant\"},{\"name\":\"AZURE_AI_PROJECT_ENDPOINT\",\"value\":\"$ENDPOINT\"},{\"name\":\"ENVIRONMENT\",\"value\":\"dev\"}]" \
+  --mode Incremental
 ```
 
-The `AGENT_NAME` environment variable selects which agent the container serves. The same Docker image supports all agents — only the env var changes.
+The `AGENT_NAME` environment variable selects which agent the container serves. The same Docker image supports all agents — only the env vars change.
+
+> **CI/CD**: The `deploy.yml` workflow automates this — it loops over all registered agents (or a specific one) and deploys each via Bicep.
 
 ---
 
