@@ -10,10 +10,10 @@ requires-python = ">=3.11"
 readme = "README.md"
 license = {text = "MIT"}
 dependencies = [
-    "agent-framework",
+    "agent-framework>=1.0.0rc3,<2",
     "azure-identity>=1.15.0",
     "pydantic-settings>=2.0.0",
-    "azure-ai-agentserver-agentframework>=1.0.0b1",
+    "azure-ai-agentserver-agentframework>=1.0.0b17",
     "azure-ai-agents>=1.2.0b5",
     "azure-ai-agentserver-core>=1.0.0b7",
 ]

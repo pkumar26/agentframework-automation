@@ -59,6 +59,7 @@ from agents._base.agent_factory import create_agent  # noqa: E402
 from agents.code_helper.config import CodeHelperConfig  # noqa: E402
 from agents.doc_assistant.config import DocAssistantConfig  # noqa: E402
 
+
 REGISTRY = AgentRegistry(
     [
         AgentRegistryEntry(

@@ -197,7 +197,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--all",
         action="store_true",
         dest="delete_all",
-        help="Delete all scaffolded agents (except built-in ones)",
+        help="Delete all registered agents (except built-in ones)",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Skip the confirmation prompt",
     )
     return parser
 
@@ -209,22 +214,18 @@ def delete_agent(
     registry_path: Path | None = None,
     pyproject_path: Path | None = None,
 ) -> int:
-    """Delete a single agent by name. Returns 0 on success, 1 on failure."""
+    """Delete agent artifacts (directories, registry, pyproject marker).
+
+    This is the low-level deletion helper called after confirmation.
+    Returns 0 on success, 1 on failure.
+    """
     _agents_dir = agents_dir or AGENTS_DIR
     _tests_dir = tests_dir or TESTS_DIR
 
     module_name = to_module_name(name)
     config_class_name = to_config_class_name(name)
 
-    agent_exists, test_exists, registry_exists = check_agent_exists(
-        name, module_name, _agents_dir, _tests_dir, registry_path
-    )
-
-    if not any([agent_exists, test_exists, registry_exists]):
-        _error(f"No artifacts found for agent '{name}'")
-        return 1
-
-    _info(f"Deleting agent '{name}'...")
+    removed_count = 0
 
     # Remove directories
     agent_dir = _agents_dir / module_name
@@ -234,6 +235,7 @@ def delete_agent(
         except ValueError:
             rel = agent_dir
         _success(f"Removed {rel}")
+        removed_count += 1
 
     test_dir = _tests_dir / module_name
     if remove_directory(test_dir):
@@ -242,36 +244,134 @@ def delete_agent(
         except ValueError:
             rel = test_dir
         _success(f"Removed {rel}")
+        removed_count += 1
 
     # Remove registry entry
     if remove_registry_entry(name, module_name, config_class_name, registry_path):
-        _success("Removed registry entry")
+        _success("Updated agents/registry.py")
+        removed_count += 1
 
     # Remove pyproject marker
     if remove_pyproject_marker(module_name, pyproject_path):
-        _success("Removed pyproject.toml marker")
+        _success("Removed pytest marker from pyproject.toml")
 
-    _success(f"Agent '{name}' deleted successfully")
+    _success(f"Agent '{name}' deleted ({removed_count} operations)")
     return 0
 
 
+def _delete_single(
+    name: str,
+    force: bool,
+    agents_dir: Path | None = None,
+    tests_dir: Path | None = None,
+    registry_path: Path | None = None,
+    pyproject_path: Path | None = None,
+) -> int:
+    """Delete a single agent by name.
+
+    Returns 0 on success, 1 on error or cancellation.
+    """
+    _agents_dir = agents_dir or AGENTS_DIR
+    _tests_dir = tests_dir or TESTS_DIR
+
+    module_name = to_module_name(name)
+
+    agent_exists, test_exists, registry_exists = check_agent_exists(
+        name, module_name, _agents_dir, _tests_dir, registry_path
+    )
+
+    if not any([agent_exists, test_exists, registry_exists]):
+        _error(f"Agent '{name}' not found in the codebase.")
+        return 1
+
+    # Show what will be deleted
+    _info(f"The following will be removed for agent '{name}':")
+    if agent_exists:
+        _info(f"  agents/{module_name}/")
+    if test_exists:
+        _info(f"  tests/{module_name}/")
+    if registry_exists:
+        _info("  Registry entry in agents/registry.py")
+
+    # Confirm unless --force
+    if not force:
+        try:
+            answer = input(f"{PREFIX} Continue? [y/N] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            _info("Cancelled.")
+            return 1
+        if answer not in ("y", "yes"):
+            _info("Cancelled.")
+            return 1
+
+    return delete_agent(
+        name,
+        agents_dir=_agents_dir,
+        tests_dir=_tests_dir,
+        registry_path=registry_path,
+        pyproject_path=pyproject_path,
+    )
+
+
+def _delete_all(
+    force: bool,
+    registry_path: Path | None = None,
+) -> int:
+    """Delete all registered agents (except built-in ones).
+
+    Returns 0 if all succeed, 1 if any fail or none found.
+    """
+    _registry_path = registry_path or REGISTRY_PATH
+
+    names = _get_all_agent_names()
+    names = [n for n in names if n not in BUILTIN_AGENTS]
+    if not names:
+        _error("No scaffolded agents found in registry (built-in agents are excluded)")
+        return 1
+
+    _info(f"Will delete {len(names)} agent(s): {', '.join(names)}")
+    if not force:
+        try:
+            answer = input(f"{PREFIX} Continue? [y/N] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            _info("Cancelled.")
+            return 1
+        if answer not in ("y", "yes"):
+            _info("Cancelled.")
+            return 1
+
+    results: list[tuple[str, bool]] = []
+    for name in names:
+        exit_code = delete_agent(name, registry_path=registry_path)
+        results.append((name, exit_code == 0))
+
+    # Summary
+    success_count = sum(1 for _, ok in results if ok)
+    total = len(results)
+    print(f"\n{PREFIX} Summary: {success_count}/{total} agents deleted successfully")
+    for name, ok in results:
+        if ok:
+            print(f"{PREFIX}   \u2713 {name}")
+        else:
+            print(f"{PREFIX}   \u2717 {name}")
+
+    return 0 if success_count == total else 1
+
+
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point."""
+    """Entry point for the deletion script.
+
+    Returns 0 on success, 1 on error (agent not found or user cancelled).
+    """
     parser = build_parser()
     args = parser.parse_args(argv)
 
     if args.delete_all:
-        names = _get_all_agent_names()
-        names = [n for n in names if n not in BUILTIN_AGENTS]
-        if not names:
-            _error("No scaffolded agents found in registry (built-in agents are excluded)")
-            return 1
-        results = []
-        for name in names:
-            results.append(delete_agent(name))
-        return 0 if all(r == 0 for r in results) else 1
+        return _delete_all(force=args.force)
 
-    return delete_agent(args.name)
+    return _delete_single(args.name, force=args.force)
 
 
 if __name__ == "__main__":
