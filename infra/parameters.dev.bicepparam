@@ -16,7 +16,7 @@ param createNewIdentity = true
 // param existingIdentityResourceId = ''
 
 // --- ACR (full ARM resource ID — update with your ACR) ---
-param acrResourceId = '/subscriptions/<subscription-id>/resourceGroups/<acr-rg>/providers/Microsoft.ContainerRegistry/registries/<acr-name>'
+param acrResourceId = '/subscriptions/<subscription-id>/resourceGroups/agentframework-rg/providers/Microsoft.ContainerRegistry/registries/<your-acr-name>'
 
 // --- ACA Environment ---
 param existingManagedEnvironmentId = ''   // Leave empty to create a new environment

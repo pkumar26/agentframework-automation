@@ -43,3 +43,6 @@ output identityResourceId string = createNewIdentity ? newIdentity.id : existing
 
 @description('Principal ID of the managed identity (for role assignments).')
 output identityPrincipalId string = createNewIdentity ? newIdentity.properties.principalId : existingIdentity!.properties.principalId
+
+@description('Client ID of the managed identity (for DefaultAzureCredential).')
+output identityClientId string = createNewIdentity ? newIdentity.properties.clientId : existingIdentity!.properties.clientId

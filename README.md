@@ -167,18 +167,28 @@ Infrastructure is managed declaratively with [Bicep](https://learn.microsoft.com
 az deployment group what-if \
   --resource-group <rg> \
   --template-file infra/main.bicep \
-  --parameters infra/parameters.dev.bicepparam \
-  --parameters appName=code-helper containerImage=<acr>.azurecr.io/agentframework:v1
+  --parameters environmentName=dev \
+  --parameters location=eastus \
+  --parameters appName=code-helper \
+  --parameters containerImage=<acr>.azurecr.io/agentframework:v1 \
+  --parameters acrResourceId="<acr-resource-id>" \
+  --parameters 'appEnvVars=[{"name":"AGENT_NAME","value":"code-helper"},{"name":"AZURE_AI_PROJECT_ENDPOINT","value":"<endpoint>"}]'
 
 # Deploy
 az deployment group create \
   --resource-group <rg> \
   --template-file infra/main.bicep \
-  --parameters infra/parameters.dev.bicepparam \
-  --parameters appName=code-helper containerImage=<acr>.azurecr.io/agentframework:v1 \
+  --parameters environmentName=dev \
+  --parameters location=eastus \
+  --parameters appName=code-helper \
+  --parameters containerImage=<acr>.azurecr.io/agentframework:v1 \
+  --parameters acrResourceId="<acr-resource-id>" \
   --parameters 'appEnvVars=[{"name":"AGENT_NAME","value":"code-helper"},{"name":"AZURE_AI_PROJECT_ENDPOINT","value":"<endpoint>"}]' \
   --mode Incremental
 ```
+
+> **Note:** Pass all parameters inline. The `.bicepparam` files cannot be combined with
+> supplemental `--parameters` flags due to a Bicep CLI limitation.
 
 See the [Deployment Guide](docs/deployment-guide.md) for full setup, managed identity, multi-agent deployment, and troubleshooting.
 
@@ -196,6 +206,7 @@ Interactive Jupyter notebooks for hands-on exploration:
 | [01_setup_and_connect.ipynb](notebooks/01_setup_and_connect.ipynb) | Verify credentials, create a chat client, assemble an agent, and run a smoke test |
 | [02_build_and_run_agent.ipynb](notebooks/02_build_and_run_agent.ipynb) | Inspect tools, send messages, trigger tool calls, multi-turn conversations, and the programmatic API |
 | [03_scaffold_agent.ipynb](notebooks/03_scaffold_agent.ipynb) | Scaffold a new agent, verify files, run tests, run the agent, and clean up |
+| [04_deploy_to_aca.ipynb](notebooks/04_deploy_to_aca.ipynb) | Build Docker image, push to ACR, deploy to Azure Container Apps, assign RBAC |
 
 ## Guides
 

@@ -7,6 +7,8 @@
 
 This guide covers how to deploy agents — locally, in Docker, and to Azure Container Apps (ACA) for production.
 
+> **Interactive walkthrough**: The [04_deploy_to_aca](../notebooks/04_deploy_to_aca.ipynb) notebook provides a step-by-step interactive deployment experience.
+
 ---
 
 ## Table of Contents
@@ -175,15 +177,22 @@ param acrResourceId = '/subscriptions/<sub-id>/resourceGroups/<rg>/providers/Mic
 AGENT="code-helper"
 IMAGE="$ACR_NAME.azurecr.io/agentframework:v1"
 ENDPOINT="https://your-project.services.ai.azure.com/api/projects/your-project"
+ACR_RES_ID="/subscriptions/<sub-id>/resourceGroups/$RG/providers/Microsoft.ContainerRegistry/registries/$ACR_NAME"
 
 az deployment group what-if \
   --resource-group "$RG" \
   --template-file infra/main.bicep \
-  --parameters infra/parameters.dev.bicepparam \
+  --parameters environmentName=dev \
+  --parameters location="$LOCATION" \
   --parameters appName="$AGENT" \
   --parameters containerImage="$IMAGE" \
+  --parameters acrResourceId="$ACR_RES_ID" \
   --parameters "appEnvVars=[{\"name\":\"AGENT_NAME\",\"value\":\"$AGENT\"},{\"name\":\"AZURE_AI_PROJECT_ENDPOINT\",\"value\":\"$ENDPOINT\"},{\"name\":\"ENVIRONMENT\",\"value\":\"dev\"}]"
 ```
+
+> **Note:** Pass all parameters inline. The `.bicepparam` files cannot be combined with
+> supplemental `--parameters` flags due to a Bicep CLI limitation. Copy the `acrResourceId`
+> value from your `.bicepparam` file, or set the `ACR_RES_ID` variable above.
 
 **Deploy:**
 
@@ -191,9 +200,11 @@ az deployment group what-if \
 az deployment group create \
   --resource-group "$RG" \
   --template-file infra/main.bicep \
-  --parameters infra/parameters.dev.bicepparam \
+  --parameters environmentName=dev \
+  --parameters location="$LOCATION" \
   --parameters appName="$AGENT" \
   --parameters containerImage="$IMAGE" \
+  --parameters acrResourceId="$ACR_RES_ID" \
   --parameters "appEnvVars=[{\"name\":\"AGENT_NAME\",\"value\":\"$AGENT\"},{\"name\":\"AZURE_AI_PROJECT_ENDPOINT\",\"value\":\"$ENDPOINT\"},{\"name\":\"ENVIRONMENT\",\"value\":\"dev\"}]" \
   --name "agent-$AGENT-dev-$(date +%Y%m%d%H%M)" \
   --mode Incremental
@@ -232,8 +243,11 @@ az acr build --registry "$ACR_NAME" --image agentframework:v2 .
 az deployment group create \
   --resource-group "$RG" \
   --template-file infra/main.bicep \
-  --parameters infra/parameters.dev.bicepparam \
-  --parameters appName="$AGENT" containerImage="$ACR_NAME.azurecr.io/agentframework:v2" \
+  --parameters environmentName=dev \
+  --parameters location="$LOCATION" \
+  --parameters appName="$AGENT" \
+  --parameters containerImage="$ACR_NAME.azurecr.io/agentframework:v2" \
+  --parameters acrResourceId="$ACR_RES_ID" \
   --parameters "appEnvVars=[{\"name\":\"AGENT_NAME\",\"value\":\"$AGENT\"},{\"name\":\"AZURE_AI_PROJECT_ENDPOINT\",\"value\":\"$ENDPOINT\"},{\"name\":\"ENVIRONMENT\",\"value\":\"dev\"}]" \
   --mode Incremental
 ```
@@ -288,10 +302,12 @@ Bicep handles the rolling update — ACA provisions a new revision with the new 
 
 | Variable | When Needed | Description |
 |----------|-------------|-------------|
-| `AZURE_CLIENT_ID` | Service principal auth | App registration client ID |
+| `AZURE_CLIENT_ID` | User-assigned MI / service principal | Client ID of the identity. Auto-injected by Bicep for user-assigned MI in ACA |
 | `AZURE_CLIENT_SECRET` | Service principal auth | App registration secret |
 | `AZURE_TENANT_ID` | Service principal auth | Azure AD tenant ID |
-| _(none)_ | Managed identity | Managed identity auto-detects — no env vars needed |
+
+> **Note:** For ACA deployments using the Bicep templates, `AZURE_CLIENT_ID` is automatically
+> injected from the user-assigned managed identity. No manual configuration is needed.
 
 ---
 
@@ -307,20 +323,20 @@ Bicep handles the rolling update — ACA provisions a new revision with the new 
 
 ### Using Managed Identity in ACA (Recommended)
 
-```bash
-# Enable system-assigned managed identity
-az containerapp identity assign \
-  --name "$ACA_NAME" \
-  --resource-group "$RG" \
-  --system-assigned
+The Bicep templates create a **user-assigned managed identity** (`id-{agent}-{env}`) and
+automatically inject `AZURE_CLIENT_ID` into the container so `DefaultAzureCredential`
+picks it up. No manual identity setup is needed — just assign the RBAC role:
 
-# Get the identity's principal ID
-PRINCIPAL_ID=$(az containerapp identity show \
-  --name "$ACA_NAME" \
+```bash
+# Get the managed identity's principal ID
+PRINCIPAL_ID=$(az identity show \
+  --name "id-$AGENT-dev" \
   --resource-group "$RG" \
-  --query "principalId" -o tsv)
+  --query principalId -o tsv)
 
 # Assign Cognitive Services User role on the Foundry resource
+# Note: "Azure AI Developer" is NOT sufficient — it only covers OpenAI/* data actions,
+# not AIServices/agents/* which the Agent Framework requires.
 az role assignment create \
   --assignee-object-id "$PRINCIPAL_ID" \
   --assignee-principal-type ServicePrincipal \
@@ -328,7 +344,8 @@ az role assignment create \
   --scope "/subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.CognitiveServices/accounts/<foundry-name>"
 ```
 
-With managed identity, no secret environment variables are needed in the container app.
+With user-assigned managed identity, no secret environment variables are needed.
+The Bicep templates handle `AZURE_CLIENT_ID` injection automatically.
 
 ### Required RBAC Roles
 
@@ -336,8 +353,12 @@ The identity (service principal or managed identity) needs access to the Foundry
 
 | Role | Scope | Purpose |
 |------|-------|---------|
-| **Cognitive Services User** | Foundry resource or resource group | Call model inference APIs |
-| **Azure AI User** | Foundry resource or resource group | Additional agent service access |
+| **Cognitive Services User** | Foundry resource or resource group | Required — covers all `Microsoft.CognitiveServices/*` data actions including `AIServices/agents/*` |
+
+> **Common mistake:** The **Azure AI Developer** role looks appropriate but only covers
+> `OpenAI/*`, `SpeechServices/*`, `ContentSafety/*`, and `MaaS/*` data actions — it does
+> **not** include `AIServices/agents/*` which the Agent Framework uses. Always use
+> **Cognitive Services User** instead.
 
 ---
 
@@ -350,8 +371,11 @@ Each agent runs as a **separate container app**, all sharing the same Docker ima
 az deployment group create \
   --resource-group "$RG" \
   --template-file infra/main.bicep \
-  --parameters infra/parameters.dev.bicepparam \
-  --parameters appName=code-helper containerImage="$IMAGE" \
+  --parameters environmentName=dev \
+  --parameters location="$LOCATION" \
+  --parameters appName=code-helper \
+  --parameters containerImage="$IMAGE" \
+  --parameters acrResourceId="$ACR_RES_ID" \
   --parameters "appEnvVars=[{\"name\":\"AGENT_NAME\",\"value\":\"code-helper\"},{\"name\":\"AZURE_AI_PROJECT_ENDPOINT\",\"value\":\"$ENDPOINT\"},{\"name\":\"ENVIRONMENT\",\"value\":\"dev\"}]" \
   --mode Incremental
 
@@ -359,8 +383,11 @@ az deployment group create \
 az deployment group create \
   --resource-group "$RG" \
   --template-file infra/main.bicep \
-  --parameters infra/parameters.dev.bicepparam \
-  --parameters appName=doc-assistant containerImage="$IMAGE" \
+  --parameters environmentName=dev \
+  --parameters location="$LOCATION" \
+  --parameters appName=doc-assistant \
+  --parameters containerImage="$IMAGE" \
+  --parameters acrResourceId="$ACR_RES_ID" \
   --parameters "appEnvVars=[{\"name\":\"AGENT_NAME\",\"value\":\"doc-assistant\"},{\"name\":\"AZURE_AI_PROJECT_ENDPOINT\",\"value\":\"$ENDPOINT\"},{\"name\":\"ENVIRONMENT\",\"value\":\"dev\"}]" \
   --mode Incremental
 ```
@@ -396,6 +423,7 @@ az containerapp update \
 | `DefaultAzureCredential failed` | No valid credentials found | Run `az login` (local) or check service principal env vars (Docker) or managed identity (ACA) |
 | `Connection refused on :8088` | Agent not starting | Check `AGENT_NAME` matches a registered agent; check container logs |
 | `Model deployment not found` | Wrong deployment name | Verify `AGENT_DEPLOYMENT_NAME` or agent config matches a deployment in your Foundry project |
-| `403 Forbidden` on Foundry calls | Missing RBAC | Assign `Cognitive Services User` role to the identity on the Foundry resource |
+| `403 Forbidden` / `PermissionDenied` on Foundry | Missing or wrong RBAC role | Assign **Cognitive Services User** role (not Azure AI Developer — it only covers `OpenAI/*` data actions, not `AIServices/agents/*`) |
+| `DefaultAzureCredential` fails in ACA | Missing `AZURE_CLIENT_ID` | User-assigned managed identities require `AZURE_CLIENT_ID`. Bicep injects it automatically; verify with `az containerapp show` |
 | Container exits immediately | Startup error | Check logs: `az containerapp logs show --name <name> --resource-group <rg>` |
-| `ModuleNotFoundError` in container | Missing dependency | Ensure `requirements.txt` is up to date and the image was rebuilt |
+| `ModuleNotFoundError` in container | Missing dependency | Ensure `pyproject.toml` is up to date and the image was rebuilt |

@@ -35,7 +35,8 @@ async def interactive_loop(agent_name: str) -> None:
             continue
 
         result = await agent.run(prompt)
-        print(f"Agent: {result}\n")
+        text = result.text if hasattr(result, "text") else result
+        print(f"Agent: {text}\n")
 
 
 def main() -> int:
@@ -68,7 +69,7 @@ def main() -> int:
         config = entry.config_class()
         agent = entry.factory(config)
         result = asyncio.run(agent.run(args.prompt))
-        print(result)
+        print(result.text if hasattr(result, "text") else result)
     else:
         asyncio.run(interactive_loop(args.name))
 

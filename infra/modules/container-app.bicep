@@ -52,6 +52,9 @@ param maxReplicas int
 @description('Whether the container app exposes an external HTTP endpoint.')
 param ingressExternal bool
 
+@description('Client ID of the user-assigned managed identity (for DefaultAzureCredential).')
+param identityClientId string = ''
+
 @description('Non-sensitive environment variables for the container.')
 param appEnvVars array = []
 
@@ -79,8 +82,13 @@ var secretEnvVarMappings = [
   }
 ]
 
-// Merge plain env vars + secret-referenced env vars
-var containerEnvVars = concat(appEnvVars, secretEnvVarMappings)
+// Inject AZURE_CLIENT_ID so DefaultAzureCredential picks up the user-assigned identity
+var identityEnvVar = !empty(identityClientId) ? [
+  { name: 'AZURE_CLIENT_ID', value: identityClientId }
+] : []
+
+// Merge identity env var + plain env vars + secret-referenced env vars
+var containerEnvVars = concat(identityEnvVar, appEnvVars, secretEnvVarMappings)
 
 // ---------------------------------------------------------------------------
 // Resources

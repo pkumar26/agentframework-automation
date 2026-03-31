@@ -54,7 +54,7 @@ param subnetId string = ''
 param containerImage string = 'mcr.microsoft.com/k8se/quickstart:latest'
 
 @description('Target port the container listens on.')
-param targetPort int = 80
+param targetPort int = 8088
 
 @description('CPU cores allocated to the container.')
 param containerCpu string = '0.5'
@@ -69,7 +69,7 @@ param minReplicas int = 0
 param maxReplicas int = 3
 
 @description('Whether the container app exposes an external HTTP endpoint.')
-param ingressExternal bool = false
+param ingressExternal bool = true
 
 // --- Environment Variables ---
 
@@ -178,6 +178,7 @@ module containerApp './modules/container-app.bicep' = {
     tags: tags
     managedEnvironmentId: resolvedEnvironmentId
     identityResourceId: identity.outputs.identityResourceId
+    identityClientId: identity.outputs.identityClientId
     acrLoginServer: acrLoginServer
     containerImage: containerImage
     targetPort: targetPort
