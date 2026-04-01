@@ -41,4 +41,5 @@ markers = [
     "integration: marks tests requiring live Azure credentials",
     "code_helper: marks tests for the code-helper agent",
     "doc_assistant: marks tests for the doc-assistant agent",
+    "probation_poc_agent: marks tests for the probation-poc-agent agent",
 ]

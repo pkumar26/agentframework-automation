@@ -1,4 +1,4 @@
-"""Knowledge source integration stub for the code-helper agent."""
+"""Knowledge source integration stub for the probation-poc-agent agent."""
 
 from agents._base.config import AgentBaseConfig
 
@@ -12,7 +12,7 @@ def get_knowledge_tool(config: AgentBaseConfig):
     Returns:
         Tool definition when enabled (future implementation), None when disabled.
     """
-    if not getattr(config, "knowledge_source_enabled", True):
+    if not getattr(config, "knowledge_source_enabled", False):
         return None
     raise NotImplementedError(
         "Knowledge source integration is not yet implemented. "
