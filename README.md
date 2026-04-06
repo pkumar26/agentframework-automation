@@ -30,7 +30,14 @@ A multi-agent platform built on **Microsoft Agent Framework** with models infere
 │  │  ┌─────────────┐  ┌─────────────────┐   │    │
 │  │  │ code-helper │  │ doc-assistant    │   │    │
 │  │  │ + tools     │  │ + instructions   │   │    │
-│  │  └─────────────┘  └─────────────────┘   │    │
+│  │  └──────▲──────┘  └────────▲────────┘   │    │
+│  │         │  Context Providers│            │    │
+│  └─────────┼──────────────────┼────────────┘    │
+│            │                  │                  │
+│  ┌─────────┴──────────────────┴────────────┐    │
+│  │  Azure AI Search (RAG Grounding)        │    │
+│  │  Queries index → injects results as     │    │
+│  │  context before every model turn        │    │
 │  └─────────────────────────────────────────┘    │
 │  Hosting: agentserver-agentframework → :8088    │
 └─────────────────────────────────────────────────┘
@@ -109,7 +116,8 @@ agentframework-automation/
 │   │   ├── agent_factory.py   # create_agent() — assembles Agent in-process
 │   │   ├── run.py             # run_agent() — async execution
 │   │   ├── tools/             # @tool decorator utilities
-│   │   └── integrations/      # Shared integration stubs
+│   │   └── integrations/
+│   │       └── search.py      # Azure AI Search context provider (RAG)
 │   ├── code_helper/           # Example: tool-augmented agent
 │   │   ├── config.py
 │   │   ├── instructions.md
@@ -197,6 +205,25 @@ See the [Deployment Guide](docs/deployment-guide.md) for full setup, managed ide
 - **[Code Helper](agents/code_helper/README.md)** — Tool-augmented coding assistant for debugging, code review, and technical Q&A
 - **[Doc Assistant](agents/doc_assistant/README.md)** — Instruction-only documentation specialist for READMEs, API docs, and technical writing
 
+## Knowledge Base / RAG Grounding
+
+[![Azure AI Search](https://img.shields.io/badge/Azure%20AI-Search-0078D4?logo=microsoftazure&logoColor=white)](https://learn.microsoft.com/azure/search/)
+
+Ground your agents on your own data using Azure AI Search. When enabled, the agent queries your search index before every model turn and injects the top results as context — so it answers **only** from your knowledge base.
+
+```bash
+# .env — pick one approach:
+
+# Option A: Explicit endpoint + index
+AZURE_AI_SEARCH_ENDPOINT=https://<search-service>.search.windows.net
+AZURE_AI_SEARCH_INDEX_NAME=<index-name>
+
+# Option B: Foundry knowledge base name (auto-resolves endpoint + index)
+AZURE_AI_SEARCH_KNOWLEDGE_BASE=<knowledge-base-name>
+```
+
+All agents automatically pick up the search config — no per-agent changes needed. See the [Knowledge & Search Guide](docs/knowledge-search-guide.md) for full setup, RBAC, semantic search, and troubleshooting.
+
 ## Notebooks
 
 Interactive Jupyter notebooks for hands-on exploration:
@@ -213,6 +240,7 @@ Interactive Jupyter notebooks for hands-on exploration:
 - **[Deployment Guide](docs/deployment-guide.md)** — Local, Docker, and Azure Container Apps deployment (setup, authentication, multi-agent, troubleshooting)
 - **[Scaffolding Guide](docs/scaffolding-guide.md)** — YAML format, customisation, and FAQ for agent scaffolding
 - **[Custom Tools Guide](docs/custom-tools-guide.md)** — How to write, test, and run custom Python tool functions
+- **[Knowledge & Search Guide](docs/knowledge-search-guide.md)** — Ground agents on your data with Azure AI Search (setup, RBAC, semantic search, troubleshooting)
 
 ## Testing
 

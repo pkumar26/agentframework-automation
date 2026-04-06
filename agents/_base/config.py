@@ -25,3 +25,16 @@ class AgentBaseConfig(BaseSettings):
     # Azure AI Foundry project endpoint (for model inference)
     azure_ai_project_endpoint: str
     environment: Literal["dev", "qa", "prod"] = "dev"
+
+    # Azure AI Search (optional — set endpoint + index to enable RAG grounding)
+    azure_ai_search_endpoint: str | None = None
+    azure_ai_search_index_name: str | None = None
+    # Semantic configuration name (set to enable semantic/hybrid ranking).
+    # Leave unset for simple keyword search.
+    azure_ai_search_semantic_config: str | None = None
+
+    # Foundry knowledge base (optional — alternative to setting
+    # endpoint + index directly). Set the index name registered in your Foundry project; the
+    # search endpoint and underlying index name are resolved automatically via
+    # the project connections API.
+    azure_ai_search_knowledge_base: str | None = None

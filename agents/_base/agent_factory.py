@@ -12,6 +12,7 @@ from agent_framework import Agent
 
 from agents._base.client import get_chat_client
 from agents._base.config import AgentBaseConfig
+from agents._base.integrations.search import AzureAISearchContextProvider
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ def create_agent(config: AgentBaseConfig) -> Agent:
     """
     instructions = _load_instructions(config)
     tools = _collect_agent_tools(config)
+    context_providers = _collect_context_providers(config)
 
     client = get_chat_client(
         endpoint=config.azure_ai_project_endpoint,
@@ -44,6 +46,7 @@ def create_agent(config: AgentBaseConfig) -> Agent:
         name=config.agent_name,
         instructions=instructions,
         tools=tools or None,
+        context_providers=context_providers or None,
     )
 
     logger.info(
@@ -92,3 +95,83 @@ def _collect_agent_tools(config: AgentBaseConfig) -> list:
     if hasattr(tools_module, "TOOLS"):
         tools.extend(tools_module.TOOLS)
     return tools
+
+
+def _collect_context_providers(config: AgentBaseConfig) -> list:
+    """Build context providers based on config.
+
+    Supports Azure AI Search via explicit endpoint + index, or via a Foundry
+    knowledge base name (resolved through the project connections API).
+    """
+    endpoint = config.azure_ai_search_endpoint
+    index_name = config.azure_ai_search_index_name
+
+    # Resolve knowledge base name → endpoint + index via Foundry project API
+    if not (endpoint and index_name) and config.azure_ai_search_knowledge_base:
+        try:
+            endpoint, index_name = _resolve_knowledge_base(
+                project_endpoint=config.azure_ai_project_endpoint,
+                knowledge_base_name=config.azure_ai_search_knowledge_base,
+            )
+        except Exception:
+            logger.warning(
+                "Failed to resolve knowledge base '%s' — "
+                "search grounding disabled for this agent",
+                config.azure_ai_search_knowledge_base,
+                exc_info=True,
+            )
+
+    providers = []
+    if endpoint and index_name:
+        providers.append(
+            AzureAISearchContextProvider(
+                endpoint=endpoint,
+                index_name=index_name,
+                semantic_config=config.azure_ai_search_semantic_config,
+            )
+        )
+        logger.info(
+            "Enabled Azure AI Search context provider (index: %s)",
+            index_name,
+        )
+    return providers
+
+
+def _resolve_knowledge_base(
+    project_endpoint: str,
+    knowledge_base_name: str,
+) -> tuple[str, str]:
+    """Resolve a Foundry knowledge base name to (search_endpoint, index_name).
+
+    Uses the project connections and indexes APIs to look up the underlying
+    Azure AI Search service endpoint and index name.
+    """
+    from azure.ai.projects import AIProjectClient
+
+    from agents._base.client import get_credential
+
+    client = AIProjectClient(
+        endpoint=project_endpoint,
+        credential=get_credential(),
+    )
+    # Get the latest version of the index
+    versions = list(client.indexes.list_versions(knowledge_base_name))
+    if not versions:
+        raise ValueError(
+            f"Knowledge base '{knowledge_base_name}' not found in project."
+        )
+    index = versions[-1]
+    search_index_name = index.index_name
+    connection_name = index.connection_name
+
+    # Resolve connection → search endpoint
+    connection = client.connections.get(connection_name)
+    search_endpoint = connection.target
+
+    logger.info(
+        "Resolved knowledge base '%s' → endpoint=%s, index=%s",
+        knowledge_base_name,
+        search_endpoint,
+        search_index_name,
+    )
+    return search_endpoint, search_index_name
