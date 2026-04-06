@@ -8,6 +8,8 @@ services:
       - AZURE_AI_PROJECT_ENDPOINT=${AZURE_AI_PROJECT_ENDPOINT}
       - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
       - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
+      - AZURE_AUTHORITY_HOST=${AZURE_AUTHORITY_HOST:-}
+      - DISABLE_SSL_VERIFY=${DISABLE_SSL_VERIFY:-false}
       # WARNING: For production, use Docker secrets or Azure Key Vault
       # instead of passing secrets via environment variables.
       - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}

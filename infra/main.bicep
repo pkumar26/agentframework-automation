@@ -93,7 +93,9 @@ var resourceSuffix = '${appName}-${environmentName}'
 // Derive ACR name and resource group from the full resource ID
 var acrResourceGroup = split(acrResourceId, '/')[4]
 var acrName = last(split(acrResourceId, '/'))
-var acrLoginServer = '${acrName}.azurecr.io'
+// Use azurecr.us for Azure Government, azurecr.io for public cloud
+var acrSuffix = contains(location, 'usgov') ? 'azurecr.us' : 'azurecr.io'
+var acrLoginServer = '${acrName}.${acrSuffix}'
 
 // Conditional: create a new ACA environment or use existing
 var createNewEnvironment = empty(existingManagedEnvironmentId)

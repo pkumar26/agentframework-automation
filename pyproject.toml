@@ -16,6 +16,8 @@ dependencies = [
     "azure-ai-agentserver-agentframework>=1.0.0b17",
     "azure-ai-agents>=1.2.0b5",
     "azure-ai-agentserver-core>=1.0.0b7",
+    "uvicorn>=0.30.0",
+    "starlette>=0.38.0",
 ]
 
 [dependency-groups]
@@ -42,4 +44,5 @@ markers = [
     "code_helper: marks tests for the code-helper agent",
     "doc_assistant: marks tests for the doc-assistant agent",
     "probation_poc_agent: marks tests for the probation-poc-agent agent",
+    "probation_q_a_agent: marks tests for the probation-q-a-agent agent",
 ]

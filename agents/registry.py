@@ -59,6 +59,8 @@ from agents._base.agent_factory import create_agent  # noqa: E402
 from agents.code_helper.config import CodeHelperConfig  # noqa: E402
 from agents.doc_assistant.config import DocAssistantConfig  # noqa: E402
 from agents.probation_poc_agent.config import ProbationPocAgentConfig  # noqa: E402
+from agents.probation_q_a_agent.config import ProbationQAAgentConfig  # noqa: E402
+
 
 
 
@@ -77,6 +79,11 @@ REGISTRY = AgentRegistry(
         AgentRegistryEntry(
             name="probation-poc-agent",
             config_class=ProbationPocAgentConfig,
+            factory=create_agent,
+        ),
+        AgentRegistryEntry(
+            name="probation-q-a-agent",
+            config_class=ProbationQAAgentConfig,
             factory=create_agent,
         ),
     ]

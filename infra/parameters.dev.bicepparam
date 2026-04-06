@@ -9,16 +9,15 @@ using './main.bicep'
 
 param environmentName = 'dev'
 param appName = 'agentfw'               // Overridden per-agent at deploy time
-param location = 'eastus'
+param location = 'usgovarizona'         // Azure Government region
 
 // --- Identity: create a new one per agent ---
 param createNewIdentity = true
 // param existingIdentityResourceId = ''
 
 // --- ACR (full ARM resource ID — update with your ACR) ---
-// Replace <subscription-id>, <acr-rg>, and <acr-name> with your actual values.
-// Or pass acrResourceId inline at deploy time to avoid committing secrets.
-param acrResourceId = '/subscriptions/<subscription-id>/resourceGroups/<acr-rg>/providers/Microsoft.ContainerRegistry/registries/<acr-name>'
+// For Azure Government, ACR uses azurecr.us domain
+param acrResourceId = '/subscriptions/ec27ea62-bfa8-4a38-a9fb-c88a2f4fb31b/resourceGroups/<acr-rg>/providers/Microsoft.ContainerRegistry/registries/<acr-name>'
 
 // --- ACA Environment ---
 param existingManagedEnvironmentId = ''   // Leave empty to create a new environment
@@ -36,6 +35,9 @@ param ingressExternal = true
 // --- Environment Variables (overridden per-agent at deploy time) ---
 param appEnvVars = [
   { name: 'ENVIRONMENT', value: 'dev' }
+  { name: 'AZURE_AUTHORITY_HOST', value: 'https://login.microsoftonline.us/' }
+  { name: 'AZURE_AI_PROJECT_ENDPOINT', value: 'https://ai-openai-arizona.openai.azure.us/' }
+  { name: 'AGENT_DEPLOYMENT_NAME', value: 'gpt-4o' }
 ]
 
 // --- Secrets (uncomment when Key Vault secrets are ready) ---
