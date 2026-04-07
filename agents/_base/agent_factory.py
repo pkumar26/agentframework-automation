@@ -6,6 +6,7 @@ Models are called via Azure AI Foundry endpoints for inference.
 
 import importlib
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from agent_framework import Agent
@@ -55,6 +56,70 @@ def create_agent(config: AgentBaseConfig) -> Agent:
         config.agent_deployment_name,
     )
     return agent
+
+
+@asynccontextmanager
+async def agent_session(config: AgentBaseConfig):
+    """Async context manager that connects MCP servers and yields an Agent.
+
+    Connects all configured MCP tools, assembles the agent with both
+    function tools and MCP tools, and disconnects MCP tools on exit.
+    Works transparently when no MCP servers are configured.
+
+    Usage::
+
+        async with agent_session(config) as agent:
+            result = await agent.run("Hello!")
+
+    Args:
+        config: An agent-specific config object (subclass of AgentBaseConfig).
+
+    Yields:
+        A fully assembled Agent with MCP tools connected.
+    """
+    mcp_tools = _build_mcp_tools(config)
+    connected = []
+    try:
+        for tool in mcp_tools:
+            await tool.__aenter__()
+            connected.append(tool)
+            logger.info("Connected MCP server '%s'", tool.name)
+
+        instructions = _load_instructions(config)
+        function_tools = _collect_agent_tools(config)
+        context_providers = _collect_context_providers(config)
+        all_tools = function_tools + mcp_tools
+
+        client = get_chat_client(
+            endpoint=config.azure_ai_project_endpoint,
+            deployment_name=config.agent_deployment_name,
+        )
+
+        agent = client.as_agent(
+            name=config.agent_name,
+            instructions=instructions,
+            tools=all_tools or None,
+            context_providers=context_providers or None,
+        )
+
+        logger.info(
+            "Assembled agent '%s' (model: %s, %d MCP server(s))",
+            config.agent_name,
+            config.agent_deployment_name,
+            len(mcp_tools),
+        )
+        yield agent
+    finally:
+        for tool in reversed(connected):
+            try:
+                await tool.__aexit__(None, None, None)
+                logger.info("Disconnected MCP server '%s'", tool.name)
+            except Exception:
+                logger.warning(
+                    "Error disconnecting MCP server '%s'",
+                    tool.name,
+                    exc_info=True,
+                )
 
 
 def _load_instructions(config: AgentBaseConfig) -> str:
@@ -175,3 +240,70 @@ def _resolve_knowledge_base(
         search_index_name,
     )
     return search_endpoint, search_index_name
+
+
+def _build_mcp_tools(config: AgentBaseConfig) -> list:
+    """Create MCP tool instances from config (unconnected).
+
+    Supports stdio, HTTP, and WebSocket transports. The returned tools
+    must be connected via ``async with`` before use — ``agent_session()``
+    handles this automatically.
+    """
+    if not config.mcp_servers:
+        return []
+
+    from agent_framework import MCPStdioTool, MCPStreamableHTTPTool, MCPWebsocketTool
+
+    tools = []
+    for server in config.mcp_servers:
+        if server.transport == "stdio":
+            if not server.command:
+                logger.warning(
+                    "MCP server '%s': stdio transport requires 'command'",
+                    server.name,
+                )
+                continue
+            tools.append(
+                MCPStdioTool(
+                    name=server.name,
+                    command=server.command,
+                    args=server.args or [],
+                    env=server.env,
+                    description=server.description,
+                )
+            )
+        elif server.transport == "http":
+            if not server.url:
+                logger.warning(
+                    "MCP server '%s': http transport requires 'url'",
+                    server.name,
+                )
+                continue
+            tools.append(
+                MCPStreamableHTTPTool(
+                    name=server.name,
+                    url=server.url,
+                    description=server.description,
+                )
+            )
+        elif server.transport == "websocket":
+            if not server.url:
+                logger.warning(
+                    "MCP server '%s': websocket transport requires 'url'",
+                    server.name,
+                )
+                continue
+            tools.append(
+                MCPWebsocketTool(
+                    name=server.name,
+                    url=server.url,
+                    description=server.description,
+                )
+            )
+        else:
+            logger.warning(
+                "MCP server '%s': unknown transport '%s'",
+                server.name,
+                server.transport,
+            )
+    return tools

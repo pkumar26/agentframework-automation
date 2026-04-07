@@ -9,6 +9,7 @@ import asyncio
 import logging
 import sys
 
+from agents._base.agent_factory import agent_session
 from agents.registry import REGISTRY
 
 
@@ -16,27 +17,27 @@ async def interactive_loop(agent_name: str) -> None:
     """Run an interactive conversation loop with an agent."""
     entry = REGISTRY.get_agent(agent_name)
     config = entry.config_class()
-    agent = entry.factory(config)
 
-    print(f"Agent '{agent_name}' ready. Type 'quit' to exit.\n")
+    async with agent_session(config) as agent:
+        print(f"Agent '{agent_name}' ready. Type 'quit' to exit.\n")
 
-    while True:
-        try:
-            prompt = input("You: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print("\nGoodbye!")
-            break
+        while True:
+            try:
+                prompt = input("You: ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print("\nGoodbye!")
+                break
 
-        if prompt.lower() in ("quit", "exit", "bye"):
-            print("Goodbye!")
-            break
+            if prompt.lower() in ("quit", "exit", "bye"):
+                print("Goodbye!")
+                break
 
-        if not prompt:
-            continue
+            if not prompt:
+                continue
 
-        result = await agent.run(prompt)
-        text = result.text if hasattr(result, "text") else result
-        print(f"Agent: {text}\n")
+            result = await agent.run(prompt)
+            text = result.text if hasattr(result, "text") else result
+            print(f"Agent: {text}\n")
 
 
 def main() -> int:
@@ -67,9 +68,13 @@ def main() -> int:
 
     if args.prompt:
         config = entry.config_class()
-        agent = entry.factory(config)
-        result = asyncio.run(agent.run(args.prompt))
-        print(result.text if hasattr(result, "text") else result)
+
+        async def _run_single():
+            async with agent_session(config) as agent:
+                result = await agent.run(args.prompt)
+                print(result.text if hasattr(result, "text") else result)
+
+        asyncio.run(_run_single())
     else:
         asyncio.run(interactive_loop(args.name))
 

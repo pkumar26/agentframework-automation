@@ -21,6 +21,7 @@ class TestRunAgent:
 
         config = MagicMock()
         config.agent_name = "test-agent"
+        config.mcp_servers = None
 
         result = run_agent(config, "Hello")
 
@@ -37,6 +38,7 @@ class TestRunAgent:
 
         config = MagicMock()
         config.agent_name = "test-agent"
+        config.mcp_servers = None
 
         result = run_agent(config, "Hello")
 
@@ -51,6 +53,7 @@ class TestRunAgent:
 
         config = MagicMock()
         config.agent_name = "test-agent"
+        config.mcp_servers = None
 
         with pytest.raises(RuntimeError, match="API error"):
             run_agent(config, "Hello")

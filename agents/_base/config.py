@@ -3,9 +3,25 @@
 from pathlib import Path
 from typing import Literal
 
+from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+class MCPServerConfig(BaseModel):
+    """Configuration for a single MCP server connection."""
+
+    name: str
+    transport: Literal["stdio", "http", "websocket"] = "stdio"
+    # stdio transport
+    command: str | None = None
+    args: list[str] | None = None
+    env: dict[str, str] | None = None
+    # http / websocket transport
+    url: str | None = None
+    # common
+    description: str | None = None
 
 
 class AgentBaseConfig(BaseSettings):
@@ -38,3 +54,7 @@ class AgentBaseConfig(BaseSettings):
     # search endpoint and underlying index name are resolved automatically via
     # the project connections API.
     azure_ai_search_knowledge_base: str | None = None
+
+    # MCP servers (optional — JSON list of MCPServerConfig objects).
+    # Set via env var: MCP_SERVERS='[{"name":"github","transport":"stdio","command":"npx","args":["-y","@modelcontextprotocol/server-github"]}]'
+    mcp_servers: list[MCPServerConfig] | None = None

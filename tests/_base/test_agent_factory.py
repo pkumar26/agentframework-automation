@@ -18,6 +18,11 @@ def agent_config(tmp_path):
     config.agent_name = "test-agent"
     config.agent_deployment_name = "gpt-4o"
     config.agent_instructions_path = str(instructions_file)
+    config.azure_ai_search_endpoint = None
+    config.azure_ai_search_index_name = None
+    config.azure_ai_search_semantic_config = None
+    config.azure_ai_search_knowledge_base = None
+    config.mcp_servers = None
     return config
 
 
