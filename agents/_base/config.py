@@ -42,6 +42,12 @@ class AgentBaseConfig(BaseSettings):
     azure_ai_project_endpoint: str
     environment: Literal["dev", "qa", "prod"] = "dev"
 
+    # Azure authority host (optional — set for sovereign clouds).
+    # Commercial (default): https://login.microsoftonline.com
+    # US Government:         https://login.microsoftonline.us
+    # China (21Vianet):      https://login.chinacloudapi.cn
+    azure_authority_host: str | None = None
+
     # Azure AI Search (optional — set endpoint + index to enable RAG grounding)
     azure_ai_search_endpoint: str | None = None
     azure_ai_search_index_name: str | None = None

@@ -41,6 +41,7 @@ def create_agent(config: AgentBaseConfig) -> Agent:
     client = get_chat_client(
         endpoint=config.azure_ai_project_endpoint,
         deployment_name=config.agent_deployment_name,
+        authority=config.azure_authority_host,
     )
 
     agent = client.as_agent(
@@ -93,6 +94,7 @@ async def agent_session(config: AgentBaseConfig):
         client = get_chat_client(
             endpoint=config.azure_ai_project_endpoint,
             deployment_name=config.agent_deployment_name,
+            authority=config.azure_authority_host,
         )
 
         agent = client.as_agent(
@@ -177,6 +179,7 @@ def _collect_context_providers(config: AgentBaseConfig) -> list:
             endpoint, index_name = _resolve_knowledge_base(
                 project_endpoint=config.azure_ai_project_endpoint,
                 knowledge_base_name=config.azure_ai_search_knowledge_base,
+                authority=config.azure_authority_host,
             )
         except Exception:
             logger.warning(
@@ -205,6 +208,7 @@ def _collect_context_providers(config: AgentBaseConfig) -> list:
 def _resolve_knowledge_base(
     project_endpoint: str,
     knowledge_base_name: str,
+    authority: str | None = None,
 ) -> tuple[str, str]:
     """Resolve a Foundry knowledge base name to (search_endpoint, index_name).
 
@@ -217,7 +221,7 @@ def _resolve_knowledge_base(
 
     client = AIProjectClient(
         endpoint=project_endpoint,
-        credential=get_credential(),
+        credential=get_credential(authority=authority),
     )
     # Get the latest version of the index
     versions = list(client.indexes.list_versions(knowledge_base_name))

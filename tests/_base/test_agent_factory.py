@@ -22,6 +22,7 @@ def agent_config(tmp_path):
     config.azure_ai_search_index_name = None
     config.azure_ai_search_semantic_config = None
     config.azure_ai_search_knowledge_base = None
+    config.azure_authority_host = None
     config.mcp_servers = None
     return config
 
@@ -59,6 +60,7 @@ class TestCreateAgent:
         mock_get_client.assert_called_once_with(
             endpoint="https://test.services.ai.azure.com/api/projects/test",
             deployment_name="gpt-4o",
+            authority=None,
         )
 
     def test_missing_instructions_raises_file_not_found(self, agent_config):

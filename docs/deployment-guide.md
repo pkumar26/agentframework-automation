@@ -305,6 +305,7 @@ Bicep handles the rolling update — ACA provisions a new revision with the new 
 | `AZURE_CLIENT_ID` | User-assigned MI / service principal | Client ID of the identity. Auto-injected by Bicep for user-assigned MI in ACA |
 | `AZURE_CLIENT_SECRET` | Service principal auth | App registration secret |
 | `AZURE_TENANT_ID` | Service principal auth | Azure AD tenant ID |
+| `AZURE_AUTHORITY_HOST` | Sovereign / government clouds | Authority URL (e.g., `https://login.microsoftonline.us` for US Gov). Omit for commercial cloud |
 
 > **Note:** For ACA deployments using the Bicep templates, `AZURE_CLIENT_ID` is automatically
 > injected from the user-assigned managed identity. No manual configuration is needed.
@@ -359,6 +360,29 @@ The identity (service principal or managed identity) needs access to the Foundry
 > `OpenAI/*`, `SpeechServices/*`, `ContentSafety/*`, and `MaaS/*` data actions — it does
 > **not** include `AIServices/agents/*` which the Agent Framework uses. Always use
 > **Cognitive Services User** instead.
+
+### Sovereign / Government Clouds
+
+By default, `DefaultAzureCredential` authenticates against the Azure commercial cloud
+(`login.microsoftonline.com`). For sovereign clouds, set `AZURE_AUTHORITY_HOST` in your
+`.env` file or container environment:
+
+| Cloud | Authority Host |
+|-------|----------------|
+| Commercial (default) | `https://login.microsoftonline.com` |
+| US Government | `https://login.microsoftonline.us` |
+| China (21Vianet) | `https://login.chinacloudapi.cn` |
+
+```bash
+# .env (for local development / docker-compose)
+AZURE_AUTHORITY_HOST=https://login.microsoftonline.us
+
+# ACA deployment — add to appEnvVars in the Bicep command
+--parameters "appEnvVars=[...,{\"name\":\"AZURE_AUTHORITY_HOST\",\"value\":\"https://login.microsoftonline.us\"}]"
+```
+
+> **Note:** Also ensure your `AZURE_AI_PROJECT_ENDPOINT` points to the corresponding
+> sovereign cloud endpoint (e.g., `.usgovcloudapi.net` for US Government).
 
 ---
 
@@ -421,6 +445,7 @@ az containerapp update \
 | Issue | Cause | Resolution |
 |-------|-------|------------|
 | `DefaultAzureCredential failed` | No valid credentials found | Run `az login` (local) or check service principal env vars (Docker) or managed identity (ACA) |
+| `DefaultAzureCredential` fails with gov/sovereign credentials | Wrong authority host | Set `AZURE_AUTHORITY_HOST` to the correct sovereign cloud URL (see [Sovereign / Government Clouds](#sovereign--government-clouds)) |
 | `Connection refused on :8088` | Agent not starting | Check `AGENT_NAME` matches a registered agent; check container logs |
 | `Model deployment not found` | Wrong deployment name | Verify `AGENT_DEPLOYMENT_NAME` or agent config matches a deployment in your Foundry project |
 | `403 Forbidden` / `PermissionDenied` on Foundry | Missing or wrong RBAC role | Assign **Cognitive Services User** role (not Azure AI Developer — it only covers `OpenAI/*` data actions, not `AIServices/agents/*`) |

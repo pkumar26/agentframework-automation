@@ -32,6 +32,7 @@ class TestGetChatClient:
             deployment_name="gpt-4o",
         )
 
+        mock_cred_cls.assert_called_once_with()
         mock_client_cls.assert_called_once_with(
             project_endpoint="https://test.services.ai.azure.com/api/projects/test",
             deployment_name="gpt-4o",
@@ -59,3 +60,19 @@ class TestGetChatClient:
             reset_credential()
             get_credential()
             assert mock_cls.call_count == 2
+
+    @patch("agents._base.client.DefaultAzureCredential")
+    def test_credential_with_authority(self, mock_cred_cls):
+        """Credential should be created with authority for sovereign clouds."""
+        mock_cred_cls.return_value = MagicMock()
+        get_credential(authority="https://login.microsoftonline.us")
+        mock_cred_cls.assert_called_once_with(
+            authority="https://login.microsoftonline.us",
+        )
+
+    @patch("agents._base.client.DefaultAzureCredential")
+    def test_credential_without_authority(self, mock_cred_cls):
+        """Credential should be created without authority kwarg for commercial cloud."""
+        mock_cred_cls.return_value = MagicMock()
+        get_credential()
+        mock_cred_cls.assert_called_once_with()
