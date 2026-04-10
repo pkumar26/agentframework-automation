@@ -32,12 +32,20 @@ class AzureAISearchContextProvider(BaseContextProvider):
         top_k: int = 5,
         semantic_config: str | None = None,
         credential: DefaultAzureCredential | None = None,
+        audience: str | None = None,
+        connection_verify: bool = True,
     ):
         super().__init__(source_id="azure-ai-search")
+        kwargs: dict[str, Any] = {}
+        if audience:
+            kwargs["audience"] = audience
+        if not connection_verify:
+            kwargs["connection_verify"] = False
         self._client = SearchClient(
             endpoint=endpoint,
             index_name=index_name,
             credential=credential or DefaultAzureCredential(),
+            **kwargs,
         )
         self._top_k = top_k
         self._index_name = index_name

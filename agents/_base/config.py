@@ -61,6 +61,10 @@ class AgentBaseConfig(BaseSettings):
     # the project connections API.
     azure_ai_search_knowledge_base: str | None = None
 
+    # Disable SSL certificate verification (optional — for corporate proxies
+    # with SSL inspection). Defaults to False.
+    disable_ssl_verify: bool = False
+
     # MCP servers (optional — JSON list of MCPServerConfig objects).
     # Set via env var: MCP_SERVERS='[{"name":"github","transport":"stdio","command":"npx","args":["-y","@modelcontextprotocol/server-github"]}]'
     mcp_servers: list[MCPServerConfig] | None = None

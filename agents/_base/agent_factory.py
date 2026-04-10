@@ -11,7 +11,7 @@ from pathlib import Path
 
 from agent_framework import Agent
 
-from agents._base.client import get_chat_client
+from agents._base.client import get_chat_client, get_credential, _is_gov_cloud
 from agents._base.config import AgentBaseConfig
 from agents._base.integrations.search import AzureAISearchContextProvider
 
@@ -191,11 +191,19 @@ def _collect_context_providers(config: AgentBaseConfig) -> list:
 
     providers = []
     if endpoint and index_name:
+        search_audience = (
+            "https://search.azure.us"
+            if _is_gov_cloud(endpoint)
+            else None
+        )
         providers.append(
             AzureAISearchContextProvider(
                 endpoint=endpoint,
                 index_name=index_name,
                 semantic_config=config.azure_ai_search_semantic_config,
+                credential=get_credential(authority=config.azure_authority_host),
+                audience=search_audience,
+                connection_verify=not config.disable_ssl_verify,
             )
         )
         logger.info(
