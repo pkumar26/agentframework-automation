@@ -1,0 +1,33 @@
+# Version control
+.git
+.gitignore
+
+# CI/CD and infrastructure
+.github
+infra
+
+# Documentation and notebooks
+docs
+notebooks
+README.md
+LICENSE
+LICENSE copy
+
+# Tests
+tests
+
+# Build artifacts
+*.egg-info
+__pycache__
+*.pyc
+
+# Docker files (not needed inside the image)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Dev/test files
+test.http
+testwithrest.http
+.env
+.env.*
