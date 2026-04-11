@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -24,6 +24,13 @@ class MCPServerConfig(BaseModel):
     description: str | None = None
 
 
+# Sentinel alias that prevents pydantic-settings from mapping
+# AGENT_NAME / AGENT_DEPLOYMENT_NAME env vars to agent identity fields.
+# Used in Field(validation_alias=...) on agent_name, agent_deployment_name,
+# and agent_instructions_path so they keep their per-agent defaults.
+_IDENTITY_ALIAS = "__agent_identity__"
+
+
 class AgentBaseConfig(BaseSettings):
     """Shared configuration base for all agents.
 
@@ -37,6 +44,13 @@ class AgentBaseConfig(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    # Agent identity fields — set per-agent in subclass config, NOT from env vars.
+    # The .env AGENT_NAME is used by app.py to select which agent to serve;
+    # validation_alias prevents it from overriding the per-agent default.
+    agent_name: str = Field(default="", validation_alias=_IDENTITY_ALIAS)
+    agent_deployment_name: str = Field(default="gpt-4o", validation_alias=_IDENTITY_ALIAS)
+    agent_instructions_path: str = Field(default="", validation_alias=_IDENTITY_ALIAS)
 
     # Azure AI Foundry project endpoint (for model inference)
     azure_ai_project_endpoint: str

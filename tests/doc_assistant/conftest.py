@@ -15,7 +15,6 @@ def doc_assistant_config(tmp_path):
 
     with pytest.MonkeyPatch.context() as m:
         m.setenv("AZURE_AI_PROJECT_ENDPOINT", "https://test.services.ai.azure.com/api/projects/test")
-        config = DocAssistantConfig(
-            agent_instructions_path=str(instructions_file),
-        )
+        config = DocAssistantConfig()
+    config.agent_instructions_path = str(instructions_file)
     return config

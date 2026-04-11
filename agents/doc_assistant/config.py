@@ -1,6 +1,10 @@
 """Configuration for the doc-assistant agent."""
 
-from agents._base.config import AgentBaseConfig
+from pydantic import Field
+
+from agents._base.config import AgentBaseConfig, _IDENTITY_ALIAS
+
+_SKIP = _IDENTITY_ALIAS
 
 
 class DocAssistantConfig(AgentBaseConfig):
@@ -9,6 +13,6 @@ class DocAssistantConfig(AgentBaseConfig):
     Extends the base config with agent-specific settings and defaults.
     """
 
-    agent_name: str = "doc-assistant"
-    agent_deployment_name: str = "gpt-4o"
-    agent_instructions_path: str = "agents/doc_assistant/instructions.md"
+    agent_name: str = Field(default="doc-assistant", validation_alias=_SKIP)
+    agent_deployment_name: str = Field(default="gpt-4o", validation_alias=_SKIP)
+    agent_instructions_path: str = Field(default="agents/doc_assistant/instructions.md", validation_alias=_SKIP)

@@ -163,7 +163,11 @@ def _template_config(
     return textwrap.dedent(f'''\
         """Configuration for the {agent_name} agent."""
 
-        from agents._base.config import AgentBaseConfig
+        from pydantic import Field
+
+        from agents._base.config import AgentBaseConfig, _IDENTITY_ALIAS
+
+        _SKIP = _IDENTITY_ALIAS
 
 
         class {config_cls}(AgentBaseConfig):
@@ -172,9 +176,9 @@ def _template_config(
             Extends the base config with agent-specific settings and defaults.
             """
 
-            agent_name: str = "{agent_name}"
-            agent_deployment_name: str = "{model}"
-            agent_instructions_path: str = "{instructions_path}"
+            agent_name: str = Field(default="{agent_name}", validation_alias=_SKIP)
+            agent_deployment_name: str = Field(default="{model}", validation_alias=_SKIP)
+            agent_instructions_path: str = Field(default="{instructions_path}", validation_alias=_SKIP)
     ''')
 
 
@@ -366,9 +370,8 @@ def _template_conftest(module_name: str, config_class_name: str) -> str:
 
             with pytest.MonkeyPatch.context() as m:
                 m.setenv("AZURE_AI_PROJECT_ENDPOINT", "https://test.services.ai.azure.com/api/projects/test")
-                config = {config_class_name}(
-                    agent_instructions_path=str(instructions_file),
-                )
+                config = {config_class_name}()
+            config.agent_instructions_path = str(instructions_file)
             return config
     ''')
 

@@ -15,7 +15,6 @@ def code_helper_config(tmp_path):
 
     with pytest.MonkeyPatch.context() as m:
         m.setenv("AZURE_AI_PROJECT_ENDPOINT", "https://test.services.ai.azure.com/api/projects/test")
-        config = CodeHelperConfig(
-            agent_instructions_path=str(instructions_file),
-        )
+        config = CodeHelperConfig()
+    config.agent_instructions_path = str(instructions_file)
     return config
