@@ -34,6 +34,10 @@ param ingressExternal = true
 // --- Environment Variables (overridden per-agent at deploy time) ---
 param appEnvVars = [
   { name: 'ENVIRONMENT', value: 'prod' }
+  // Uncomment to enable Azure AI Search grounding (Option A: explicit endpoint + index):
+  // { name: 'AZURE_AI_SEARCH_ENDPOINT', value: 'https://<search-service>.search.windows.net' }
+  // { name: 'AZURE_AI_SEARCH_INDEX_NAME', value: '<index-name>' }
+  // { name: 'AZURE_AI_SEARCH_SEMANTIC_CONFIG', value: '<semantic-config-name>' }  // optional
 ]
 
 // --- Secrets (uncomment when Key Vault secrets are ready) ---

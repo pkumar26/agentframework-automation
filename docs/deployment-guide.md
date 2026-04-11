@@ -298,6 +298,17 @@ Bicep handles the rolling update — ACA provisions a new revision with the new 
 | `AGENT_DEPLOYMENT_NAME` | No | Per-agent default | Override the model deployment name |
 | `ENVIRONMENT` | No | `dev` | Environment label (`dev`, `qa`, `prod`) |
 
+### Knowledge Base / Search Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `AZURE_AI_SEARCH_ENDPOINT` | For search grounding | Azure AI Search service URL (e.g., `https://<name>.search.windows.net`) |
+| `AZURE_AI_SEARCH_INDEX_NAME` | For search grounding | Name of the search index to query |
+| `AZURE_AI_SEARCH_SEMANTIC_CONFIG` | No | Semantic configuration name for higher-quality ranking |
+
+If none of the search variables are set, agents run without search grounding (model-only).
+See the [Knowledge Base & Search Guide](knowledge-search-guide.md) for full details.
+
 ### Authentication Variables
 
 | Variable | When Needed | Description |
@@ -383,6 +394,82 @@ AZURE_AUTHORITY_HOST=https://login.microsoftonline.us
 
 > **Note:** Also ensure your `AZURE_AI_PROJECT_ENDPOINT` points to the corresponding
 > sovereign cloud endpoint (e.g., `.usgovcloudapi.net` for US Government).
+
+---
+
+## Knowledge Base / Search Grounding in ACA
+
+[![Azure AI Search](https://img.shields.io/badge/Azure%20AI-Search-0078D4?logo=microsoftazure&logoColor=white)](https://learn.microsoft.com/azure/search/)
+
+To deploy agents with knowledge base grounding to ACA, you need two things:
+environment variables and an RBAC role assignment.
+
+### 1. Pass Search Variables at Deploy Time
+
+Search configuration is passed via `appEnvVars` in the Bicep deployment.
+The `deploy.yml` workflow reads these from **GitHub repository variables**
+and conditionally includes them when set.
+
+**Set these GitHub variables** (Settings → Variables and secrets → Actions → Variables):
+
+| GitHub Variable | Value | Required |
+|-----------------|-------|----------|
+| `AZURE_AI_SEARCH_ENDPOINT` | `https://<search-service>.search.windows.net` | Yes |
+| `AZURE_AI_SEARCH_INDEX_NAME` | `<index-name>` | Yes |
+| `AZURE_AI_SEARCH_SEMANTIC_CONFIG` | `<semantic-config-name>` | No |
+
+If these variables are not set, the workflow deploys agents without search
+grounding — no errors, just model-only answers.
+
+**Manual CLI deployment** — add the search vars to `appEnvVars`:
+
+```bash
+az deployment group create \
+  --resource-group "$RG" \
+  --template-file infra/main.bicep \
+  --parameters environmentName=dev \
+  --parameters appName="$AGENT" \
+  --parameters containerImage="$IMAGE" \
+  --parameters acrResourceId="$ACR_RES_ID" \
+  --parameters "appEnvVars=[\
+    {\"name\":\"AGENT_NAME\",\"value\":\"$AGENT\"},\
+    {\"name\":\"AZURE_AI_PROJECT_ENDPOINT\",\"value\":\"$ENDPOINT\"},\
+    {\"name\":\"AZURE_AI_SEARCH_ENDPOINT\",\"value\":\"https://<search-service>.search.windows.net\"},\
+    {\"name\":\"AZURE_AI_SEARCH_INDEX_NAME\",\"value\":\"<index-name>\"},\
+    {\"name\":\"ENVIRONMENT\",\"value\":\"dev\"}\
+  ]" \
+  --mode Incremental
+```
+
+The `.bicepparam` files also contain commented-out examples for reference.
+
+### 2. RBAC: Grant Search Index Data Reader
+
+The managed identity created by Bicep (`id-{agent}-{env}`) needs the
+**Search Index Data Reader** role on your Azure AI Search service:
+
+```bash
+PRINCIPAL_ID=$(az identity show \
+  --name "id-$AGENT-dev" \
+  --resource-group "$RG" \
+  --query principalId -o tsv)
+
+az role assignment create \
+  --role "Search Index Data Reader" \
+  --assignee-object-id "$PRINCIPAL_ID" \
+  --assignee-principal-type ServicePrincipal \
+  --scope "/subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.Search/searchServices/<search-service-name>"
+```
+
+### How It Works
+
+No code changes are needed. The same `AzureAISearchContextProvider` runs in
+ACA as locally — it reads env vars from `AgentBaseConfig` and authenticates
+via `DefaultAzureCredential`, which automatically uses the managed identity
+in ACA (the Bicep templates inject `AZURE_CLIENT_ID`).
+
+See the [Knowledge Base & Search Guide](knowledge-search-guide.md) for
+full architecture details, supported index field names, and troubleshooting.
 
 ---
 

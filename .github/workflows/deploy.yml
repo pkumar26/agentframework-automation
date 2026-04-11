@@ -97,8 +97,29 @@ jobs:
       - name: Deploy agent(s) to ACA via Bicep
         env:
           AZURE_AI_PROJECT_ENDPOINT: ${{ vars.AZURE_AI_PROJECT_ENDPOINT }}
+          AZURE_AI_SEARCH_ENDPOINT: ${{ vars.AZURE_AI_SEARCH_ENDPOINT }}
+          AZURE_AI_SEARCH_INDEX_NAME: ${{ vars.AZURE_AI_SEARCH_INDEX_NAME }}
+          AZURE_AI_SEARCH_SEMANTIC_CONFIG: ${{ vars.AZURE_AI_SEARCH_SEMANTIC_CONFIG }}
         run: |
           PARAM_FILE="infra/parameters.${ENVIRONMENT}.bicepparam"
+
+          # Build appEnvVars JSON array — always include core vars,
+          # conditionally add search vars when configured.
+          build_env_vars() {
+            local name="$1"
+            local vars="[{\"name\":\"AGENT_NAME\",\"value\":\"${name}\"},{\"name\":\"AZURE_AI_PROJECT_ENDPOINT\",\"value\":\"${AZURE_AI_PROJECT_ENDPOINT}\"},{\"name\":\"ENVIRONMENT\",\"value\":\"${ENVIRONMENT}\"}"
+            if [ -n "$AZURE_AI_SEARCH_ENDPOINT" ]; then
+              vars="${vars},{\"name\":\"AZURE_AI_SEARCH_ENDPOINT\",\"value\":\"${AZURE_AI_SEARCH_ENDPOINT}\"}"
+            fi
+            if [ -n "$AZURE_AI_SEARCH_INDEX_NAME" ]; then
+              vars="${vars},{\"name\":\"AZURE_AI_SEARCH_INDEX_NAME\",\"value\":\"${AZURE_AI_SEARCH_INDEX_NAME}\"}"
+            fi
+            if [ -n "$AZURE_AI_SEARCH_SEMANTIC_CONFIG" ]; then
+              vars="${vars},{\"name\":\"AZURE_AI_SEARCH_SEMANTIC_CONFIG\",\"value\":\"${AZURE_AI_SEARCH_SEMANTIC_CONFIG}\"}"
+            fi
+            vars="${vars}]"
+            echo "$vars"
+          }
 
           deploy_agent() {
             local name="$1"
@@ -109,6 +130,8 @@ jobs:
 
             DEPLOY_NAME="agent-${name}-${ENVIRONMENT}-$(date +%Y%m%d%H%M%S)"
 
+            ENV_VARS=$(build_env_vars "$name")
+
             # What-if preview
             echo "[deploy] Running what-if preview..."
             WHATIF_OUTPUT=$(az deployment group what-if \
@@ -117,7 +140,7 @@ jobs:
               --parameters "$PARAM_FILE" \
               --parameters appName="$name" \
               --parameters containerImage="$IMAGE" \
-              --parameters "appEnvVars=[{\"name\":\"AGENT_NAME\",\"value\":\"${name}\"},{\"name\":\"AZURE_AI_PROJECT_ENDPOINT\",\"value\":\"${AZURE_AI_PROJECT_ENDPOINT}\"},{\"name\":\"ENVIRONMENT\",\"value\":\"${ENVIRONMENT}\"}]" \
+              --parameters "appEnvVars=${ENV_VARS}" \
               --no-pretty-print 2>&1) || true
 
             echo "$WHATIF_OUTPUT"
@@ -139,7 +162,7 @@ jobs:
               --parameters "$PARAM_FILE" \
               --parameters appName="$name" \
               --parameters containerImage="$IMAGE" \
-              --parameters "appEnvVars=[{\"name\":\"AGENT_NAME\",\"value\":\"${name}\"},{\"name\":\"AZURE_AI_PROJECT_ENDPOINT\",\"value\":\"${AZURE_AI_PROJECT_ENDPOINT}\"},{\"name\":\"ENVIRONMENT\",\"value\":\"${ENVIRONMENT}\"}]" \
+              --parameters "appEnvVars=${ENV_VARS}" \
               --name "$DEPLOY_NAME" \
               --mode Incremental
 

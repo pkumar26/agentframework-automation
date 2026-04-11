@@ -145,12 +145,39 @@ Add role assignment → Search Index Data Reader**.
 Assign the role to the Container App's **managed identity**:
 
 ```bash
+PRINCIPAL_ID=$(az identity show \
+  --name "id-$AGENT-dev" \
+  --resource-group "$RG" \
+  --query principalId -o tsv)
+
 az role assignment create \
   --role "Search Index Data Reader" \
-  --assignee-object-id <managed-identity-principal-id> \
+  --assignee-object-id "$PRINCIPAL_ID" \
   --assignee-principal-type ServicePrincipal \
   --scope <search-service-resource-id>
 ```
+
+## CI/CD: Deploy with Search Grounding
+
+The `deploy.yml` workflow automatically passes search configuration to ACA
+when the corresponding **GitHub repository variables** are set.
+
+**Set these in your repo** (Settings → Variables and secrets → Actions → Variables):
+
+| GitHub Variable | Value |
+|-----------------|-------|
+| `AZURE_AI_SEARCH_ENDPOINT` | `https://<search-service>.search.windows.net` |
+| `AZURE_AI_SEARCH_INDEX_NAME` | `<index-name>` |
+| `AZURE_AI_SEARCH_SEMANTIC_CONFIG` | `<semantic-config-name>` *(optional)* |
+
+The workflow conditionally includes each variable only when it is set —
+if none are configured, agents deploy without search grounding (no errors).
+
+The `.bicepparam` parameter files (`infra/parameters.{dev,qa,prod}.bicepparam`)
+also contain commented-out examples for manual CLI deployments.
+
+For the full ACA deployment walkthrough, see the
+[Deployment Guide — Knowledge Base / Search Grounding](deployment-guide.md#knowledge-base--search-grounding-in-aca).
 
 ## Config Reference
 
