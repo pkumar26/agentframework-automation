@@ -167,14 +167,25 @@ See the [Custom Tools Guide](custom-tools-guide.md) for full details on function
 Edit `agents/{module_name}/config.py` to add agent-specific settings:
 
 ```python
+from pydantic import Field
+from agents._base.config import AgentBaseConfig, _IDENTITY_ALIAS
+
+_SKIP = _IDENTITY_ALIAS
+
 class MyAgentConfig(AgentBaseConfig):
-    agent_name: str = "my-agent"
-    agent_deployment_name: str = "gpt-4o"
-    agent_instructions_path: str = "agents/my_agent/instructions.md"
-    # Add custom fields:
+    agent_name: str = Field(default="my-agent", validation_alias=_SKIP)
+    agent_deployment_name: str = Field(default="gpt-4o", validation_alias=_SKIP)
+    agent_instructions_path: str = Field(default="agents/my_agent/instructions.md", validation_alias=_SKIP)
+    # Add custom fields (these CAN be set via env vars normally):
     max_results: int = 10
     api_endpoint: str = ""
 ```
+
+> **Why `validation_alias`?**  The `.env` file sets `AGENT_NAME` for `app.py` to select
+> which agent to serve.  Without `validation_alias`, pydantic-settings would map that
+> env var to `agent_name` in every config class, overriding the per-agent default.
+> The `_IDENTITY_ALIAS` sentinel prevents this for `agent_name`,
+> `agent_deployment_name`, and `agent_instructions_path`.
 
 ### 4. Write Tests
 
@@ -226,7 +237,7 @@ Create new Python files in `agents/{module_name}/tools/`, define functions and a
 
 **How do I change the model after creation?**
 
-Edit `agents/{module_name}/config.py` and update the `agent_deployment_name` field's default value. You can also override it via the `AGENT_DEPLOYMENT_NAME` environment variable.
+Edit `agents/{module_name}/config.py` and update the `agent_deployment_name` field's default value. Note that `agent_deployment_name` is shielded from env var override (via `validation_alias`) to prevent `.env` from leaking into every agent config.
 
 **Can I scaffold multiple agents at once?**
 
