@@ -54,8 +54,18 @@ User message
 
 ## Configuration
 
-There are two ways to connect your agents to a search index. Both are
-configured entirely through environment variables (`.env` file).
+Search grounding is configured entirely through environment variables (`.env`
+file locally, container env vars in ACA). Choose the option that fits your
+setup:
+
+| Scenario | Option | What you set |
+|----------|--------|--------------|
+| You have a search service URL and index name | [Option A](#option-a-explicit-endpoint--index-name) | `AZURE_AI_SEARCH_ENDPOINT` + `AZURE_AI_SEARCH_INDEX_NAME` |
+| Your index is registered in Azure AI Foundry | [Option B](#option-b-foundry-knowledge-base-name) | `AZURE_AI_SEARCH_KNOWLEDGE_BASE` |
+| You need to search **multiple** indexes | [Option C](#option-c-multiple-search-indexes) | `AZURE_AI_SEARCH_INDEXES` (JSON array) |
+
+> **Tip:** Options are additive. You can combine Option A or B with Option C
+> to search a primary index plus additional ones.
 
 ### Option A: Explicit Endpoint + Index Name
 
@@ -112,12 +122,56 @@ AZURE_AI_SEARCH_SEMANTIC_CONFIG=<semantic-config-name>
 
 Without this, the provider uses standard keyword search.
 
+### Option C: Multiple Search Indexes
+
+To ground an agent on **multiple knowledge bases** simultaneously, set
+`AZURE_AI_SEARCH_INDEXES` as a JSON array:
+
+```bash
+# .env
+AZURE_AI_SEARCH_INDEXES='[
+  {"endpoint": "https://search1.search.windows.net", "index_name": "products"},
+  {"endpoint": "https://search2.search.windows.net", "index_name": "support-docs", "semantic_config": "my-semantic-config"}
+]'
+```
+
+Each entry requires `endpoint` and `index_name`. The `semantic_config` field
+is optional per index.
+
+**When to use this:**
+
+- Agent needs to answer from both product docs and support articles
+- Different data lives in separate search services or indexes
+- You want to combine internal knowledge with external documentation
+
+**How it combines with other options:**
+
+Option C is **additive**. If you also set Option A or B, those indexes are
+searched alongside the ones in the list. For example:
+
+```bash
+# .env — searches 3 indexes total (1 from Option A + 2 from Option C)
+AZURE_AI_SEARCH_ENDPOINT=https://primary.search.windows.net
+AZURE_AI_SEARCH_INDEX_NAME=main-docs
+AZURE_AI_SEARCH_INDEXES='[
+  {"endpoint": "https://secondary.search.windows.net", "index_name": "faq"},
+  {"endpoint": "https://secondary.search.windows.net", "index_name": "tutorials"}
+]'
+```
+
+All results from all indexes are injected into the agent's context before
+each turn. The agent sees them as a single merged set of search results.
+
+> **Note:** Each search service used in the list needs the **Search Index Data
+> Reader** RBAC role assigned to the running identity. See
+> [RBAC / Permissions](#rbac--permissions).
+
 ## RBAC / Permissions
 
 ![RBAC](https://img.shields.io/badge/RBAC-Search%20Index%20Data%20Reader-green?logo=microsoftazure&logoColor=white)
 
 The identity running the agent needs the **Search Index Data Reader** role on
-the Azure AI Search service.
+**every** Azure AI Search service referenced in your config (Option A, B, or C).
 
 ### Local Development
 
@@ -169,6 +223,7 @@ when the corresponding **GitHub repository variables** are set.
 | `AZURE_AI_SEARCH_ENDPOINT` | `https://<search-service>.search.windows.net` |
 | `AZURE_AI_SEARCH_INDEX_NAME` | `<index-name>` |
 | `AZURE_AI_SEARCH_SEMANTIC_CONFIG` | `<semantic-config-name>` *(optional)* |
+| `AZURE_AI_SEARCH_INDEXES` | JSON array of `{endpoint, index_name, semantic_config}` objects *(optional, for multiple indexes)* |
 
 The workflow conditionally includes each variable only when it is set —
 if none are configured, agents deploy without search grounding (no errors).
@@ -190,6 +245,7 @@ and read automatically from environment variables:
 | `AZURE_AI_SEARCH_INDEX_NAME` | `azure_ai_search_index_name` | Option A | Index to query |
 | `AZURE_AI_SEARCH_KNOWLEDGE_BASE` | `azure_ai_search_knowledge_base` | Option B | Foundry knowledge base name |
 | `AZURE_AI_SEARCH_SEMANTIC_CONFIG` | `azure_ai_search_semantic_config` | No | Semantic configuration name |
+| `AZURE_AI_SEARCH_INDEXES` | `azure_ai_search_indexes` | Option C | JSON array of `{endpoint, index_name, semantic_config}` objects |
 
 If none of these are set, agents run without search grounding (model-only).
 
@@ -213,10 +269,13 @@ A `BaseContextProvider` subclass that:
 
 Called by `create_agent()` to wire up providers at assembly time:
 
-1. Checks for explicit `endpoint` + `index_name` in config
-2. If not found, tries to resolve `knowledge_base` via the Foundry API
-3. Wraps the resolved config in an `AzureAISearchContextProvider`
-4. Returns the providers list passed to `client.as_agent(context_providers=...)`
+1. Checks for explicit `endpoint` + `index_name` in config (Option A)
+2. If not found, tries to resolve `knowledge_base` via the Foundry API (Option B)
+3. Iterates `azure_ai_search_indexes` and creates a provider per entry (Option C)
+4. Returns the combined providers list passed to `client.as_agent(context_providers=...)`
+
+All providers run independently — each queries its own index and injects
+results into the agent's context.
 
 ## Supported Index Field Names
 
@@ -237,8 +296,9 @@ longer than 50 characters (skipping `@search.*` metadata and `*_vector` fields).
 
 ### Agent answers from general knowledge, not the knowledge base
 
-- Verify `.env` has the search config (Option A or B)
+- Verify `.env` has the search config (Option A, B, or C)
 - Check agent logs for `Enabled Azure AI Search context provider`
+  (one line per index when using Option C)
 - Check for `Injected N search results` in logs during conversations
 - If you see `No search results`, the index may be empty or the query
   didn't match — try a broader question
@@ -265,3 +325,9 @@ names in the Azure portal (Search service → Indexes → Fields) and see
 - Verify the search endpoint URL is correct and reachable
 - Confirm the index name exists on that search service
 - Check that `DefaultAzureCredential` can authenticate (run `az account show`)
+
+### Multiple indexes: some work, some don't
+
+- Each search service needs its own **Search Index Data Reader** role assignment
+- Verify each endpoint URL and index name independently
+- A failing index logs a warning but does not block other indexes from working

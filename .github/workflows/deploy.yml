@@ -100,6 +100,7 @@ jobs:
           AZURE_AI_SEARCH_ENDPOINT: ${{ vars.AZURE_AI_SEARCH_ENDPOINT }}
           AZURE_AI_SEARCH_INDEX_NAME: ${{ vars.AZURE_AI_SEARCH_INDEX_NAME }}
           AZURE_AI_SEARCH_SEMANTIC_CONFIG: ${{ vars.AZURE_AI_SEARCH_SEMANTIC_CONFIG }}
+          AZURE_AI_SEARCH_INDEXES: ${{ vars.AZURE_AI_SEARCH_INDEXES }}
         run: |
           PARAM_FILE="infra/parameters.${ENVIRONMENT}.bicepparam"
 
@@ -116,6 +117,9 @@ jobs:
             fi
             if [ -n "$AZURE_AI_SEARCH_SEMANTIC_CONFIG" ]; then
               vars="${vars},{\"name\":\"AZURE_AI_SEARCH_SEMANTIC_CONFIG\",\"value\":\"${AZURE_AI_SEARCH_SEMANTIC_CONFIG}\"}"
+            fi
+            if [ -n "$AZURE_AI_SEARCH_INDEXES" ]; then
+              vars="${vars},{\"name\":\"AZURE_AI_SEARCH_INDEXES\",\"value\":\"${AZURE_AI_SEARCH_INDEXES}\"}"
             fi
             vars="${vars}]"
             echo "$vars"

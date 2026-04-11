@@ -24,6 +24,14 @@ class MCPServerConfig(BaseModel):
     description: str | None = None
 
 
+class SearchIndexConfig(BaseModel):
+    """Configuration for a single Azure AI Search index."""
+
+    endpoint: str
+    index_name: str
+    semantic_config: str | None = None
+
+
 # Sentinel alias that prevents pydantic-settings from mapping
 # AGENT_NAME / AGENT_DEPLOYMENT_NAME env vars to agent identity fields.
 # Used in Field(validation_alias=...) on agent_name, agent_deployment_name,
@@ -74,6 +82,12 @@ class AgentBaseConfig(BaseSettings):
     # search endpoint and underlying index name are resolved automatically via
     # the project connections API.
     azure_ai_search_knowledge_base: str | None = None
+
+    # Multiple search indexes (optional — JSON list of SearchIndexConfig objects).
+    # Use when grounding an agent on multiple knowledge bases simultaneously.
+    # Set via env var: AZURE_AI_SEARCH_INDEXES='[{"endpoint":"https://search1.search.windows.net","index_name":"idx1"},{"endpoint":"https://search2.search.windows.net","index_name":"idx2"}]'
+    # These are additive — indexes here are combined with any single-index config above.
+    azure_ai_search_indexes: list[SearchIndexConfig] | None = None
 
     # MCP servers (optional — JSON list of MCPServerConfig objects).
     # Set via env var: MCP_SERVERS='[{"name":"github","transport":"stdio","command":"npx","args":["-y","@modelcontextprotocol/server-github"]}]'

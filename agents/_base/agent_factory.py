@@ -167,9 +167,15 @@ def _collect_agent_tools(config: AgentBaseConfig) -> list:
 def _collect_context_providers(config: AgentBaseConfig) -> list:
     """Build context providers based on config.
 
-    Supports Azure AI Search via explicit endpoint + index, or via a Foundry
-    knowledge base name (resolved through the project connections API).
+    Supports Azure AI Search via explicit endpoint + index, via a Foundry
+    knowledge base name (resolved through the project connections API),
+    and via a list of multiple search indexes.
+    All sources are additive — providers from single-index config and
+    the azure_ai_search_indexes list are combined.
     """
+    providers = []
+
+    # --- Single-index config (backward compatible) ---
     endpoint = config.azure_ai_search_endpoint
     index_name = config.azure_ai_search_index_name
 
@@ -189,7 +195,6 @@ def _collect_context_providers(config: AgentBaseConfig) -> list:
                 exc_info=True,
             )
 
-    providers = []
     if endpoint and index_name:
         providers.append(
             AzureAISearchContextProvider(
@@ -202,6 +207,22 @@ def _collect_context_providers(config: AgentBaseConfig) -> list:
             "Enabled Azure AI Search context provider (index: %s)",
             index_name,
         )
+
+    # --- Multiple indexes ---
+    if config.azure_ai_search_indexes:
+        for idx_cfg in config.azure_ai_search_indexes:
+            providers.append(
+                AzureAISearchContextProvider(
+                    endpoint=idx_cfg.endpoint,
+                    index_name=idx_cfg.index_name,
+                    semantic_config=idx_cfg.semantic_config,
+                )
+            )
+            logger.info(
+                "Enabled Azure AI Search context provider (index: %s)",
+                idx_cfg.index_name,
+            )
+
     return providers
 
 

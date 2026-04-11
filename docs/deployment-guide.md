@@ -305,6 +305,7 @@ Bicep handles the rolling update — ACA provisions a new revision with the new 
 | `AZURE_AI_SEARCH_ENDPOINT` | For search grounding | Azure AI Search service URL (e.g., `https://<name>.search.windows.net`) |
 | `AZURE_AI_SEARCH_INDEX_NAME` | For search grounding | Name of the search index to query |
 | `AZURE_AI_SEARCH_SEMANTIC_CONFIG` | No | Semantic configuration name for higher-quality ranking |
+| `AZURE_AI_SEARCH_INDEXES` | No | JSON array of multiple search indexes (see [Knowledge Base & Search Guide](knowledge-search-guide.md#option-c-multiple-search-indexes)) |
 
 If none of the search variables are set, agents run without search grounding (model-only).
 See the [Knowledge Base & Search Guide](knowledge-search-guide.md) for full details.
@@ -417,6 +418,7 @@ and conditionally includes them when set.
 | `AZURE_AI_SEARCH_ENDPOINT` | `https://<search-service>.search.windows.net` | Yes |
 | `AZURE_AI_SEARCH_INDEX_NAME` | `<index-name>` | Yes |
 | `AZURE_AI_SEARCH_SEMANTIC_CONFIG` | `<semantic-config-name>` | No |
+| `AZURE_AI_SEARCH_INDEXES` | JSON array of `{endpoint, index_name, semantic_config}` | No |
 
 If these variables are not set, the workflow deploys agents without search
 grounding — no errors, just model-only answers.
@@ -424,6 +426,7 @@ grounding — no errors, just model-only answers.
 **Manual CLI deployment** — add the search vars to `appEnvVars`:
 
 ```bash
+# Single index
 az deployment group create \
   --resource-group "$RG" \
   --template-file infra/main.bicep \
@@ -441,12 +444,31 @@ az deployment group create \
   --mode Incremental
 ```
 
+```bash
+# Multiple indexes (Option C)
+az deployment group create \
+  --resource-group "$RG" \
+  --template-file infra/main.bicep \
+  --parameters environmentName=dev \
+  --parameters appName="$AGENT" \
+  --parameters containerImage="$IMAGE" \
+  --parameters acrResourceId="$ACR_RES_ID" \
+  --parameters "appEnvVars=[\
+    {\"name\":\"AGENT_NAME\",\"value\":\"$AGENT\"},\
+    {\"name\":\"AZURE_AI_PROJECT_ENDPOINT\",\"value\":\"$ENDPOINT\"},\
+    {\"name\":\"AZURE_AI_SEARCH_INDEXES\",\"value\":\"[{\\\"endpoint\\\":\\\"https://search1.search.windows.net\\\",\\\"index_name\\\":\\\"products\\\"},{\\\"endpoint\\\":\\\"https://search2.search.windows.net\\\",\\\"index_name\\\":\\\"support-docs\\\"}]\"},\
+    {\"name\":\"ENVIRONMENT\",\"value\":\"dev\"}\
+  ]" \
+  --mode Incremental
+```
+
 The `.bicepparam` files also contain commented-out examples for reference.
 
 ### 2. RBAC: Grant Search Index Data Reader
 
 The managed identity created by Bicep (`id-{agent}-{env}`) needs the
-**Search Index Data Reader** role on your Azure AI Search service:
+**Search Index Data Reader** role on your Azure AI Search service.
+If using multiple indexes (Option C), repeat this for **each** search service:
 
 ```bash
 PRINCIPAL_ID=$(az identity show \
@@ -466,7 +488,9 @@ az role assignment create \
 No code changes are needed. The same `AzureAISearchContextProvider` runs in
 ACA as locally — it reads env vars from `AgentBaseConfig` and authenticates
 via `DefaultAzureCredential`, which automatically uses the managed identity
-in ACA (the Bicep templates inject `AZURE_CLIENT_ID`).
+in ACA (the Bicep templates inject `AZURE_CLIENT_ID`). When multiple indexes
+are configured, the framework creates one provider per index and merges the
+results.
 
 See the [Knowledge Base & Search Guide](knowledge-search-guide.md) for
 full architecture details, supported index field names, and troubleshooting.
