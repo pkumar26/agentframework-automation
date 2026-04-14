@@ -79,27 +79,25 @@ class TestGetChatClient:
 
     @patch("agents._base.client.DefaultAzureCredential")
     @patch("agents._base.client.AzureOpenAIResponsesClient")
-    def test_gov_cloud_uses_project_client_with_scopes(self, mock_client_cls, mock_cred_cls):
-        """Gov cloud should create AIProjectClient with correct credential_scopes."""
+    def test_gov_cloud_bypasses_project_client(self, mock_client_cls, mock_cred_cls):
+        """Gov cloud should bypass AIProjectClient and pass token_endpoint directly."""
         mock_cred = MagicMock()
         mock_cred_cls.return_value = mock_cred
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
 
-        with patch("azure.ai.projects.aio.AIProjectClient") as mock_proj_cls:
-            mock_proj_client = MagicMock()
-            mock_proj_cls.return_value = mock_proj_client
+        result = get_chat_client(
+            endpoint="https://test.services.ai.azure.us/api/projects/test",
+            deployment_name="gpt-4o",
+            authority="https://login.microsoftonline.us",
+        )
 
-            get_chat_client(
-                endpoint="https://test.services.ai.azure.us/api/projects/test",
-                deployment_name="gpt-4o",
-                authority="https://login.microsoftonline.us",
-            )
-
-            mock_proj_cls.assert_called_once_with(
-                endpoint="https://test.services.ai.azure.us/api/projects/test",
-                credential=mock_cred,
-                credential_scopes=["https://cognitiveservices.azure.us/.default"],
-            )
-            mock_client_cls.assert_called_once_with(
-                project_client=mock_proj_client,
-                deployment_name="gpt-4o",
-            )
+        mock_client_cls.assert_called_once_with(
+            endpoint="https://test.services.ai.azure.us/api/projects/test",
+            base_url="https://test.services.ai.azure.us/api/projects/test/openai/v1/",
+            deployment_name="gpt-4o",
+            credential=mock_cred,
+            token_endpoint="https://cognitiveservices.azure.us/.default",
+            api_version="preview",
+        )
+        assert result is mock_client

@@ -15,12 +15,12 @@ logger = logging.getLogger(__name__)
 _lock = threading.Lock()
 _credential = None
 
-# Sovereign cloud credential scopes.
-# The azure-ai-projects SDK defaults to "https://ai.azure.com/.default" which
-# is only valid in the commercial cloud.  For sovereign clouds the token
-# audience must match the cloud-specific Cognitive Services resource ID.
+# Sovereign cloud token scope.
+# The azure-ai-projects SDK hardcodes "https://ai.azure.com/.default" in
+# AIProjectClient.get_openai_client() which is only valid in commercial Azure.
+# For US Government the token audience must be the gov-specific endpoint.
 _GOV_AUTHORITY_FRAGMENT = "login.microsoftonline.us"
-_GOV_CREDENTIAL_SCOPES = ["https://cognitiveservices.azure.us/.default"]
+_GOV_TOKEN_SCOPE = "https://cognitiveservices.azure.us/.default"
 
 
 def get_credential(authority: str | None = None):
@@ -58,20 +58,19 @@ def get_chat_client(
     """
     credential = get_credential(authority=authority)
 
-    # Sovereign clouds: the default credential_scopes in AIProjectClient
-    # ("https://ai.azure.com/.default") are invalid outside commercial Azure.
-    # Create the project client ourselves with the correct scopes.
+    # Sovereign clouds: AIProjectClient.get_openai_client() hardcodes the
+    # commercial scope "https://ai.azure.com/.default" which causes
+    # ManagedIdentityCredential to fail with invalid_scope in gov cloud.
+    # Bypass the project client entirely and build the OpenAI client ourselves
+    # with the correct gov token scope fed through token_endpoint.
     if authority and _GOV_AUTHORITY_FRAGMENT in authority:
-        from azure.ai.projects.aio import AIProjectClient
-
-        project_client = AIProjectClient(
-            endpoint=endpoint,
-            credential=credential,
-            credential_scopes=_GOV_CREDENTIAL_SCOPES,
-        )
         return AzureOpenAIResponsesClient(
-            project_client=project_client,
+            endpoint=endpoint.rstrip("/"),
+            base_url=endpoint.rstrip("/") + "/openai/v1/",
             deployment_name=deployment_name,
+            credential=credential,
+            token_endpoint=_GOV_TOKEN_SCOPE,
+            api_version="preview",
         )
 
     return AzureOpenAIResponsesClient(
