@@ -76,3 +76,30 @@ class TestGetChatClient:
         mock_cred_cls.return_value = MagicMock()
         get_credential()
         mock_cred_cls.assert_called_once_with()
+
+    @patch("agents._base.client.DefaultAzureCredential")
+    @patch("agents._base.client.AzureOpenAIResponsesClient")
+    def test_gov_cloud_uses_project_client_with_scopes(self, mock_client_cls, mock_cred_cls):
+        """Gov cloud should create AIProjectClient with correct credential_scopes."""
+        mock_cred = MagicMock()
+        mock_cred_cls.return_value = mock_cred
+
+        with patch("azure.ai.projects.aio.AIProjectClient") as mock_proj_cls:
+            mock_proj_client = MagicMock()
+            mock_proj_cls.return_value = mock_proj_client
+
+            get_chat_client(
+                endpoint="https://test.services.ai.azure.us/api/projects/test",
+                deployment_name="gpt-4o",
+                authority="https://login.microsoftonline.us",
+            )
+
+            mock_proj_cls.assert_called_once_with(
+                endpoint="https://test.services.ai.azure.us/api/projects/test",
+                credential=mock_cred,
+                credential_scopes=["https://cognitiveservices.azure.us/.default"],
+            )
+            mock_client_cls.assert_called_once_with(
+                project_client=mock_proj_client,
+                deployment_name="gpt-4o",
+            )

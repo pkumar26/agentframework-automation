@@ -15,6 +15,13 @@ logger = logging.getLogger(__name__)
 _lock = threading.Lock()
 _credential = None
 
+# Sovereign cloud credential scopes.
+# The azure-ai-projects SDK defaults to "https://ai.azure.com/.default" which
+# is only valid in the commercial cloud.  For sovereign clouds the token
+# audience must match the cloud-specific Cognitive Services resource ID.
+_GOV_AUTHORITY_FRAGMENT = "login.microsoftonline.us"
+_GOV_CREDENTIAL_SCOPES = ["https://cognitiveservices.azure.us/.default"]
+
 
 def get_credential(authority: str | None = None):
     """Get or create a shared DefaultAzureCredential.
@@ -49,10 +56,28 @@ def get_chat_client(
     Returns:
         A configured AzureOpenAIResponsesClient.
     """
+    credential = get_credential(authority=authority)
+
+    # Sovereign clouds: the default credential_scopes in AIProjectClient
+    # ("https://ai.azure.com/.default") are invalid outside commercial Azure.
+    # Create the project client ourselves with the correct scopes.
+    if authority and _GOV_AUTHORITY_FRAGMENT in authority:
+        from azure.ai.projects.aio import AIProjectClient
+
+        project_client = AIProjectClient(
+            endpoint=endpoint,
+            credential=credential,
+            credential_scopes=_GOV_CREDENTIAL_SCOPES,
+        )
+        return AzureOpenAIResponsesClient(
+            project_client=project_client,
+            deployment_name=deployment_name,
+        )
+
     return AzureOpenAIResponsesClient(
         project_endpoint=endpoint,
         deployment_name=deployment_name,
-        credential=get_credential(authority=authority),
+        credential=credential,
     )
 
 
