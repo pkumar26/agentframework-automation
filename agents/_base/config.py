@@ -70,6 +70,14 @@ class AgentBaseConfig(BaseSettings):
     # China (21Vianet):      https://login.chinacloudapi.cn
     azure_authority_host: str | None = None
 
+    # Token scope for Azure OpenAI (optional — override for sovereign clouds).
+    # The SDK defaults to "https://cognitiveservices.azure.com/.default" for
+    # commercial Azure.  Set this when the default scope is rejected by the
+    # managed identity endpoint (invalid_scope 400).
+    # Try in order: https://cognitiveservices.azure.com/.default
+    #               https://cognitiveservices.azure.us/.default
+    azure_openai_token_scope: str | None = None
+
     # Azure AI Search (optional — set endpoint + index to enable RAG grounding)
     azure_ai_search_endpoint: str | None = None
     azure_ai_search_index_name: str | None = None

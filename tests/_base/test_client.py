@@ -100,3 +100,28 @@ class TestGetChatClient:
             api_version="preview",
         )
         assert result is mock_client
+
+    @patch("agents._base.client.DefaultAzureCredential")
+    @patch("agents._base.client.AzureOpenAIResponsesClient")
+    def test_gov_cloud_custom_token_scope(self, mock_client_cls, mock_cred_cls):
+        """Gov cloud should use custom token_scope when provided."""
+        mock_cred = MagicMock()
+        mock_cred_cls.return_value = mock_cred
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+
+        result = get_chat_client(
+            endpoint="https://myoai.openai.azure.us",
+            deployment_name="gpt-4o",
+            authority="https://login.microsoftonline.us",
+            token_scope="https://cognitiveservices.azure.com/.default",
+        )
+
+        mock_client_cls.assert_called_once_with(
+            endpoint="https://myoai.openai.azure.us",
+            deployment_name="gpt-4o",
+            credential=mock_cred,
+            token_endpoint="https://cognitiveservices.azure.com/.default",
+            api_version="preview",
+        )
+        assert result is mock_client

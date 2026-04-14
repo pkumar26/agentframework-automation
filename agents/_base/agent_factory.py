@@ -42,6 +42,7 @@ def create_agent(config: AgentBaseConfig) -> Agent:
         endpoint=config.azure_ai_project_endpoint,
         deployment_name=config.agent_deployment_name,
         authority=config.azure_authority_host,
+        token_scope=config.azure_openai_token_scope,
     )
 
     agent = client.as_agent(
@@ -95,6 +96,7 @@ async def agent_session(config: AgentBaseConfig):
             endpoint=config.azure_ai_project_endpoint,
             deployment_name=config.agent_deployment_name,
             authority=config.azure_authority_host,
+            token_scope=config.azure_openai_token_scope,
         )
 
         agent = client.as_agent(

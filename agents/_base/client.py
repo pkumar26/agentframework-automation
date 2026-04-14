@@ -15,10 +15,7 @@ logger = logging.getLogger(__name__)
 _lock = threading.Lock()
 _credential = None
 
-# Sovereign cloud token scope.
-# The azure-ai-projects SDK hardcodes "https://ai.azure.com/.default" in
-# AIProjectClient.get_openai_client() which is only valid in commercial Azure.
-# For US Government the token audience must be the gov-specific endpoint.
+# Sovereign cloud default token scope (used when no explicit scope is configured).
 _GOV_AUTHORITY_FRAGMENT = "login.microsoftonline.us"
 _GOV_TOKEN_SCOPE = "https://cognitiveservices.azure.us/.default"
 
@@ -45,13 +42,16 @@ def get_chat_client(
     endpoint: str,
     deployment_name: str,
     authority: str | None = None,
+    token_scope: str | None = None,
 ) -> AzureOpenAIResponsesClient:
     """Create an AzureOpenAIResponsesClient for the given endpoint and deployment.
 
     Args:
-        endpoint: Azure AI Foundry project endpoint URL.
+        endpoint: Azure OpenAI or Foundry project endpoint URL.
         deployment_name: Model deployment name (e.g., "gpt-4o").
         authority: Azure authority host URL for sovereign clouds.
+        token_scope: Token scope override for sovereign clouds
+            (e.g., "https://cognitiveservices.azure.us/.default").
 
     Returns:
         A configured AzureOpenAIResponsesClient.
@@ -66,11 +66,12 @@ def get_chat_client(
     # For gov we pass the endpoint directly to AsyncAzureOpenAI with the
     # correct token scope.
     if authority and _GOV_AUTHORITY_FRAGMENT in authority:
+        scope = token_scope or _GOV_TOKEN_SCOPE
         return AzureOpenAIResponsesClient(
             endpoint=endpoint.rstrip("/"),
             deployment_name=deployment_name,
             credential=credential,
-            token_endpoint=_GOV_TOKEN_SCOPE,
+            token_endpoint=scope,
             api_version="preview",
         )
 
