@@ -58,15 +58,16 @@ def get_chat_client(
     """
     credential = get_credential(authority=authority)
 
-    # Sovereign clouds: AIProjectClient.get_openai_client() hardcodes the
-    # commercial scope "https://ai.azure.com/.default" which causes
-    # ManagedIdentityCredential to fail with invalid_scope in gov cloud.
-    # Bypass the project client entirely and build the OpenAI client ourselves
-    # with the correct gov token scope fed through token_endpoint.
+    # Sovereign clouds (e.g. Azure Government) typically use a direct Azure
+    # OpenAI endpoint (https://xxx.openai.azure.us) instead of a Foundry
+    # project endpoint.  The commercial path uses project_endpoint which
+    # creates an AIProjectClient internally — that client hardcodes the
+    # scope "https://ai.azure.com/.default" which is invalid in gov cloud.
+    # For gov we pass the endpoint directly to AsyncAzureOpenAI with the
+    # correct token scope.
     if authority and _GOV_AUTHORITY_FRAGMENT in authority:
         return AzureOpenAIResponsesClient(
             endpoint=endpoint.rstrip("/"),
-            base_url=endpoint.rstrip("/") + "/openai/v1/",
             deployment_name=deployment_name,
             credential=credential,
             token_endpoint=_GOV_TOKEN_SCOPE,

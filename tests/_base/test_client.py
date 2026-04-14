@@ -80,21 +80,20 @@ class TestGetChatClient:
     @patch("agents._base.client.DefaultAzureCredential")
     @patch("agents._base.client.AzureOpenAIResponsesClient")
     def test_gov_cloud_bypasses_project_client(self, mock_client_cls, mock_cred_cls):
-        """Gov cloud should bypass AIProjectClient and pass token_endpoint directly."""
+        """Gov cloud should bypass AIProjectClient and use direct endpoint with token_endpoint."""
         mock_cred = MagicMock()
         mock_cred_cls.return_value = mock_cred
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
 
         result = get_chat_client(
-            endpoint="https://test.services.ai.azure.us/api/projects/test",
+            endpoint="https://myoai.openai.azure.us",
             deployment_name="gpt-4o",
             authority="https://login.microsoftonline.us",
         )
 
         mock_client_cls.assert_called_once_with(
-            endpoint="https://test.services.ai.azure.us/api/projects/test",
-            base_url="https://test.services.ai.azure.us/api/projects/test/openai/v1/",
+            endpoint="https://myoai.openai.azure.us",
             deployment_name="gpt-4o",
             credential=mock_cred,
             token_endpoint="https://cognitiveservices.azure.us/.default",
