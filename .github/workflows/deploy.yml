@@ -73,6 +73,9 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       # Stage 3: Build and push container image to ACR
+      # Note: ACR_SUFFIX defaults to "azurecr.io" (commercial cloud).
+      # For sovereign clouds, set ACR_SUFFIX repo variable:
+      #   US Government: azurecr.us | China: azurecr.cn
       - name: Login to ACR
         run: az acr login --name ${{ vars.ACR_NAME }}
 

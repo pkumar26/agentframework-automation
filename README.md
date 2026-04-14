@@ -178,7 +178,7 @@ az deployment group what-if \
   --parameters environmentName=dev \
   --parameters location=eastus \
   --parameters appName=code-helper \
-  --parameters containerImage=<acr>.azurecr.io/agentframework:v1 \
+  --parameters containerImage=<acr-login-server>/agentframework:v1 \
   --parameters acrResourceId="<acr-resource-id>" \
   --parameters 'appEnvVars=[{"name":"AGENT_NAME","value":"code-helper"},{"name":"AZURE_AI_PROJECT_ENDPOINT","value":"<endpoint>"}]'
 
@@ -189,7 +189,7 @@ az deployment group create \
   --parameters environmentName=dev \
   --parameters location=eastus \
   --parameters appName=code-helper \
-  --parameters containerImage=<acr>.azurecr.io/agentframework:v1 \
+  --parameters containerImage=<acr-login-server>/agentframework:v1 \
   --parameters acrResourceId="<acr-resource-id>" \
   --parameters 'appEnvVars=[{"name":"AGENT_NAME","value":"code-helper"},{"name":"AZURE_AI_PROJECT_ENDPOINT","value":"<endpoint>"}]' \
   --mode Incremental
@@ -197,6 +197,7 @@ az deployment group create \
 
 > **Note:** Pass all parameters inline. The `.bicepparam` files cannot be combined with
 > supplemental `--parameters` flags due to a Bicep CLI limitation.
+> Use `<acr-name>.azurecr.io` for commercial cloud or `<acr-name>.azurecr.us` for US Government.
 
 See the [Deployment Guide](docs/deployment-guide.md) for full setup, managed identity, multi-agent deployment, and troubleshooting.
 

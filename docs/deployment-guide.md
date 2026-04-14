@@ -156,8 +156,11 @@ az acr build \
   .
 
 # Or build locally and push
-docker build -t "$ACR_NAME.azurecr.io/agentframework:v1" .
-docker push "$ACR_NAME.azurecr.io/agentframework:v1"
+# Use the correct ACR suffix for your cloud:
+#   Commercial: azurecr.io | US Gov: azurecr.us | China: azurecr.cn
+ACR_SUFFIX="azurecr.io"   # Change for sovereign clouds
+docker build -t "$ACR_NAME.$ACR_SUFFIX/agentframework:v1" .
+docker push "$ACR_NAME.$ACR_SUFFIX/agentframework:v1"
 ```
 
 ### 3. Deploy via Bicep
@@ -175,7 +178,8 @@ param acrResourceId = '/subscriptions/<sub-id>/resourceGroups/<rg>/providers/Mic
 
 ```bash
 AGENT="code-helper"
-IMAGE="$ACR_NAME.azurecr.io/agentframework:v1"
+ACR_SUFFIX="azurecr.io"   # Use "azurecr.us" for US Gov, "azurecr.cn" for China
+IMAGE="$ACR_NAME.$ACR_SUFFIX/agentframework:v1"
 ENDPOINT="https://your-project.services.ai.azure.com/api/projects/your-project"
 ACR_RES_ID="/subscriptions/<sub-id>/resourceGroups/$RG/providers/Microsoft.ContainerRegistry/registries/$ACR_NAME"
 
@@ -246,7 +250,7 @@ az deployment group create \
   --parameters environmentName=dev \
   --parameters location="$LOCATION" \
   --parameters appName="$AGENT" \
-  --parameters containerImage="$ACR_NAME.azurecr.io/agentframework:v2" \
+  --parameters containerImage="$ACR_NAME.$ACR_SUFFIX/agentframework:v2" \
   --parameters acrResourceId="$ACR_RES_ID" \
   --parameters "appEnvVars=[{\"name\":\"AGENT_NAME\",\"value\":\"$AGENT\"},{\"name\":\"AZURE_AI_PROJECT_ENDPOINT\",\"value\":\"$ENDPOINT\"},{\"name\":\"ENVIRONMENT\",\"value\":\"dev\"}]" \
   --mode Incremental
@@ -379,11 +383,11 @@ By default, `DefaultAzureCredential` authenticates against the Azure commercial 
 (`login.microsoftonline.com`). For sovereign clouds, set `AZURE_AUTHORITY_HOST` in your
 `.env` file or container environment:
 
-| Cloud | Authority Host |
-|-------|----------------|
-| Commercial (default) | `https://login.microsoftonline.com` |
-| US Government | `https://login.microsoftonline.us` |
-| China (21Vianet) | `https://login.chinacloudapi.cn` |
+| Cloud | Authority Host | ACR Suffix |
+|-------|----------------|------------|
+| Commercial (default) | `https://login.microsoftonline.com` | `azurecr.io` |
+| US Government | `https://login.microsoftonline.us` | `azurecr.us` |
+| China (21Vianet) | `https://login.chinacloudapi.cn` | `azurecr.cn` |
 
 ```bash
 # .env (for local development / docker-compose)
@@ -392,6 +396,26 @@ AZURE_AUTHORITY_HOST=https://login.microsoftonline.us
 # ACA deployment — add to appEnvVars in the Bicep command
 --parameters "appEnvVars=[...,{\"name\":\"AZURE_AUTHORITY_HOST\",\"value\":\"https://login.microsoftonline.us\"}]"
 ```
+
+> **ACR login server:** The Bicep templates automatically resolve the correct ACR login
+> server (e.g., `myacr.azurecr.us` for US Government) from the ACR resource. No manual
+> suffix configuration is needed for infrastructure deployments.
+>
+> **Notebook / CLI image references:** When building and pushing images outside of Bicep
+> (e.g., in the deployment notebook or manual CLI), use the correct ACR suffix for your
+> cloud. In the notebook, set `ACR_SUFFIX = "azurecr.us"` in the configuration cell.
+> For manual CLI:
+> ```bash
+> # Commercial cloud
+> docker build -t "$ACR_NAME.azurecr.io/agentframework:v1" .
+>
+> # US Government
+> docker build -t "$ACR_NAME.azurecr.us/agentframework:v1" .
+> ```
+>
+> **GitHub Actions:** Set the `ACR_SUFFIX` repository variable (defaults to `azurecr.io`
+> if not set). For US Government: Settings → Variables → Actions → set `ACR_SUFFIX` to
+> `azurecr.us`.
 
 > **Note:** Also ensure your `AZURE_AI_PROJECT_ENDPOINT` points to the corresponding
 > sovereign cloud endpoint (e.g., `.usgovcloudapi.net` for US Government).
@@ -557,6 +581,7 @@ az containerapp update \
 |-------|-------|------------|
 | `DefaultAzureCredential failed` | No valid credentials found | Run `az login` (local) or check service principal env vars (Docker) or managed identity (ACA) |
 | `DefaultAzureCredential` fails with gov/sovereign credentials | Wrong authority host | Set `AZURE_AUTHORITY_HOST` to the correct sovereign cloud URL (see [Sovereign / Government Clouds](#sovereign--government-clouds)) |
+| `failed to resolve registry 'xxx.azurecr.io'` (gov/sovereign cloud) | Wrong ACR suffix in image reference | Use the correct suffix for your cloud: `azurecr.us` (US Gov), `azurecr.cn` (China). Bicep resolves this automatically; check notebook `ACR_SUFFIX` or GitHub Actions `ACR_SUFFIX` variable |
 | `Connection refused on :8088` | Agent not starting | Check `AGENT_NAME` matches a registered agent; check container logs |
 | `Model deployment not found` | Wrong deployment name | Verify `AGENT_DEPLOYMENT_NAME` or agent config matches a deployment in your Foundry project |
 | `403 Forbidden` / `PermissionDenied` on Foundry | Missing or wrong RBAC role | Assign **Cognitive Services User** role (not Azure AI Developer — it only covers `OpenAI/*` data actions, not `AIServices/agents/*`) |
