@@ -78,7 +78,8 @@ jobs:
 
       - name: Build and push image
         run: |
-          IMAGE="${{ vars.ACR_NAME }}.azurecr.io/agentframework:${{ github.sha }}"
+          ACR_SUFFIX="${{ vars.ACR_SUFFIX || 'azurecr.io' }}"
+          IMAGE="${{ vars.ACR_NAME }}.${ACR_SUFFIX}/agentframework:${{ github.sha }}"
           docker build -t "$IMAGE" .
           docker push "$IMAGE"
           echo "IMAGE=$IMAGE" >> $GITHUB_ENV

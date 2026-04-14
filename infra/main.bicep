@@ -93,7 +93,13 @@ var resourceSuffix = '${appName}-${environmentName}'
 // Derive ACR name and resource group from the full resource ID
 var acrResourceGroup = split(acrResourceId, '/')[4]
 var acrName = last(split(acrResourceId, '/'))
-var acrLoginServer = '${acrName}.azurecr.io'
+
+// Reference existing ACR to resolve login server dynamically (works for all clouds: .azurecr.io, .azurecr.us, etc.)
+resource existingAcr 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
+  name: acrName
+  scope: resourceGroup(acrResourceGroup)
+}
+var acrLoginServer = existingAcr.properties.loginServer
 
 // Conditional: create a new ACA environment or use existing
 var createNewEnvironment = empty(existingManagedEnvironmentId)
