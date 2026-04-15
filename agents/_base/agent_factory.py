@@ -197,12 +197,18 @@ def _collect_context_providers(config: AgentBaseConfig) -> list:
                 exc_info=True,
             )
 
+    # Share the credential that already handles sovereign cloud authority
+    from agents._base.client import get_credential
+
+    credential = get_credential(authority=config.azure_authority_host)
+
     if endpoint and index_name:
         providers.append(
             AzureAISearchContextProvider(
                 endpoint=endpoint,
                 index_name=index_name,
                 semantic_config=config.azure_ai_search_semantic_config,
+                credential=credential,
             )
         )
         logger.info(
@@ -218,6 +224,7 @@ def _collect_context_providers(config: AgentBaseConfig) -> list:
                     endpoint=idx_cfg.endpoint,
                     index_name=idx_cfg.index_name,
                     semantic_config=idx_cfg.semantic_config,
+                    credential=credential,
                 )
             )
             logger.info(
