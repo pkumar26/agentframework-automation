@@ -67,8 +67,12 @@ def get_chat_client(
     # correct token scope.
     if authority and _GOV_AUTHORITY_FRAGMENT in authority:
         scope = token_scope or _GOV_TOKEN_SCOPE
+        # The SDK only auto-generates base_url for .openai.azure.com hosts.
+        # Gov endpoints (.openai.azure.us) need it set explicitly.
+        base_url = endpoint.rstrip("/") + "/openai/v1/"
         return AzureOpenAIResponsesClient(
             endpoint=endpoint.rstrip("/"),
+            base_url=base_url,
             deployment_name=deployment_name,
             credential=credential,
             token_endpoint=scope,

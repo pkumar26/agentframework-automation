@@ -94,6 +94,7 @@ class TestGetChatClient:
 
         mock_client_cls.assert_called_once_with(
             endpoint="https://myoai.openai.azure.us",
+            base_url="https://myoai.openai.azure.us/openai/v1/",
             deployment_name="gpt-4o",
             credential=mock_cred,
             token_endpoint="https://cognitiveservices.azure.us/.default",
@@ -119,6 +120,7 @@ class TestGetChatClient:
 
         mock_client_cls.assert_called_once_with(
             endpoint="https://myoai.openai.azure.us",
+            base_url="https://myoai.openai.azure.us/openai/v1/",
             deployment_name="gpt-4o",
             credential=mock_cred,
             token_endpoint="https://cognitiveservices.azure.com/.default",
