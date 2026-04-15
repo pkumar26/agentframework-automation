@@ -36,6 +36,15 @@ def _hide_project_endpoint_for_gov(config) -> None:
     agentserver initialises causes it to fall back to a no-op tool runtime
     (``ThrowingFoundryToolRuntime``) that never requests the bad scope.
     Our own agent code already has the endpoint via the config object.
+
+    SDK bug: azure-ai-agentserver hardcodes ``ai.azure.com/.default`` in
+    FoundryToolClientConfiguration and _create_openai_client (base.py lines
+    ~106, ~285).  Remove this workaround once the SDK accepts a
+    ``credential_scopes`` parameter or adds sovereign cloud support.
+
+    Disabled gov features (unavailable without Foundry):
+    - Foundry tool runtime (connected tools, hosted MCP)
+    - Conversation storage (store=true)
     """
     authority = config.azure_authority_host or ""
     if _GOV_AUTHORITY_FRAGMENT in authority:
