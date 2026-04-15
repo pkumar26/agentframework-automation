@@ -24,6 +24,10 @@ logger = logging.getLogger(__name__)
 class AzureAISearchContextProvider(BaseContextProvider):
     """Injects Azure AI Search results into agent context before each turn."""
 
+    # Gov cloud search audience (SearchClient defaults to commercial otherwise)
+    _GOV_ENDPOINT_SUFFIX = ".azure.us"
+    _GOV_AUDIENCE = "https://search.azure.us"
+
     def __init__(
         self,
         *,
@@ -34,10 +38,14 @@ class AzureAISearchContextProvider(BaseContextProvider):
         semantic_config: str | None = None,
     ):
         super().__init__(source_id="azure-ai-search")
+        kwargs = {}
+        if self._GOV_ENDPOINT_SUFFIX in endpoint:
+            kwargs["audience"] = self._GOV_AUDIENCE
         self._client = SearchClient(
             endpoint=endpoint,
             index_name=index_name,
             credential=credential,
+            **kwargs,
         )
         self._top_k = top_k
         self._index_name = index_name
