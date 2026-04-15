@@ -20,12 +20,39 @@ from agents.registry import REGISTRY
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
+_GOV_AUTHORITY_FRAGMENT = "login.microsoftonline.us"
+
+
+def _hide_project_endpoint_for_gov(config) -> None:
+    """Prevent the agentserver from using ``ai.azure.com`` scope in sovereign clouds.
+
+    The agentserver's FoundryToolClient hardcodes
+    ``https://ai.azure.com/.default`` for tool-runtime and conversation
+    storage.  That resource principal does not exist in Azure Government
+    tenants, so the managed-identity token request fails with
+    ``invalid_scope 400``.
+
+    Removing ``AZURE_AI_PROJECT_ENDPOINT`` from the environment before the
+    agentserver initialises causes it to fall back to a no-op tool runtime
+    (``ThrowingFoundryToolRuntime``) that never requests the bad scope.
+    Our own agent code already has the endpoint via the config object.
+    """
+    authority = config.azure_authority_host or ""
+    if _GOV_AUTHORITY_FRAGMENT in authority:
+        removed = os.environ.pop("AZURE_AI_PROJECT_ENDPOINT", None)
+        if removed:
+            logger.info(
+                "Gov cloud: removed AZURE_AI_PROJECT_ENDPOINT from env "
+                "to prevent agentserver ai.azure.com token request"
+            )
+
 
 async def _serve_with_mcp(agent_name: str) -> None:
     """Start the hosted server with MCP tools connected."""
     entry = REGISTRY.get_agent(agent_name)
     config = entry.config_class()
     credential = get_credential(authority=config.azure_authority_host)
+    _hide_project_endpoint_for_gov(config)
 
     async with agent_session(config) as agent:
         logger.info("Starting hosted agent (with MCP): %s", agent_name)
@@ -42,6 +69,7 @@ def main():
     entry = REGISTRY.get_agent(agent_name)
     config = entry.config_class()
     credential = get_credential(authority=config.azure_authority_host)
+    _hide_project_endpoint_for_gov(config)
 
     if config.mcp_servers:
         asyncio.run(_serve_with_mcp(agent_name))
