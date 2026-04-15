@@ -29,15 +29,15 @@ class AzureAISearchContextProvider(BaseContextProvider):
         *,
         endpoint: str,
         index_name: str,
+        credential: DefaultAzureCredential,
         top_k: int = 5,
         semantic_config: str | None = None,
-        credential: DefaultAzureCredential | None = None,
     ):
         super().__init__(source_id="azure-ai-search")
         self._client = SearchClient(
             endpoint=endpoint,
             index_name=index_name,
-            credential=credential or DefaultAzureCredential(),
+            credential=credential,
         )
         self._top_k = top_k
         self._index_name = index_name
