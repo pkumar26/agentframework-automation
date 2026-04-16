@@ -239,8 +239,10 @@ curl -X POST "https://$FQDN/responses" \
 
 ### 5. Update a Deployment
 
+Bump the image tag and re-deploy:
+
 ```bash
-# Push a new image version
+# Push a new image version (bump tag: v1 → v2 → v3 ...)
 az acr build --registry "$ACR_NAME" --image agentframework:v2 .
 
 # Re-run the Bicep deployment with the new image
@@ -257,6 +259,19 @@ az deployment group create \
 ```
 
 Bicep handles the rolling update — ACA provisions a new revision with the new image.
+
+> **Force a fresh build (no cache):** ACR Tasks (`az acr build`) and Docker
+> both cache layers by default. If you change `pyproject.toml` dependencies
+> but reuse the same image tag, the cached layer may be served. Two options:
+>
+> 1. **Bump the tag** (recommended): `v1` → `v2` → `v3`. This is the
+>    simplest and most reliable approach, and is required on some clouds
+>    where `--no-cache` is not supported (e.g., Azure Government ACR).
+> 2. **`--no-cache` flag** (commercial cloud): `az acr build --no-cache ...`
+>    or `docker build --no-cache ...` to force a full rebuild.
+>
+> The deployment notebook (`04_deploy_to_aca.ipynb`) has a `NO_CACHE` flag
+> in the build step for convenience.
 
 ---
 
@@ -300,6 +315,7 @@ Bicep handles the rolling update — ACA provisions a new revision with the new 
 | `AGENT_NAME` | Yes (for `app.py`) | — | Which agent to serve (e.g., `code-helper`) |
 | `AZURE_AI_PROJECT_ENDPOINT` | Yes | — | Azure AI Foundry project endpoint URL |
 | `AGENT_DEPLOYMENT_NAME` | No | Per-agent default | Override the model deployment name |
+| `AZURE_OPENAI_TOKEN_SCOPE` | No | Auto-detected | Token scope for Azure OpenAI. Override when the default scope is rejected (`invalid_scope 400`). E.g., `https://cognitiveservices.azure.us/.default` for US Gov |
 | `ENVIRONMENT` | No | `dev` | Environment label (`dev`, `qa`, `prod`) |
 
 ### Knowledge Base / Search Variables
@@ -420,6 +436,24 @@ AZURE_AUTHORITY_HOST=https://login.microsoftonline.us
 > **Note:** Also ensure your `AZURE_AI_PROJECT_ENDPOINT` points to the corresponding
 > sovereign cloud endpoint (e.g., `.usgovcloudapi.net` for US Government).
 
+### Government Cloud Limitations
+
+The `azure-ai-agentserver-agentframework` SDK hardcodes `https://ai.azure.com/.default`
+as the token scope for its Foundry tool runtime and conversation storage. This resource
+principal does not exist in Azure Government tenants, causing `invalid_scope 400` errors.
+
+The hosting adapter (`app.py`) works around this by removing `AZURE_AI_PROJECT_ENDPOINT`
+from the environment before the agentserver initialises, which forces a fallback to a
+no-op tool runtime. Agent code still has access to the endpoint via its config object.
+
+**Features unavailable on gov cloud** (until the SDK adds sovereign cloud support):
+
+| Feature | Status | Workaround |
+|---------|--------|------------|
+| Foundry tool runtime (connected tools, hosted MCP) | Unavailable | Use local MCP servers or custom tools |
+| Conversation storage (`store=true`) | Unavailable | Responses are stateless |
+| `AZURE_OPENAI_TOKEN_SCOPE` | May need explicit override | Set to `https://cognitiveservices.azure.us/.default` if auto-detection doesn't apply |
+
 ---
 
 ## Knowledge Base / Search Grounding in ACA
@@ -516,6 +550,13 @@ in ACA (the Bicep templates inject `AZURE_CLIENT_ID`). When multiple indexes
 are configured, the framework creates one provider per index and merges the
 results.
 
+> **Gov cloud:** For `.search.azure.us` endpoints, the provider auto-detects
+> the government cloud and sets the correct `SearchClient` audience
+> (`https://search.azure.us`) automatically. Just ensure `AZURE_AUTHORITY_HOST`
+> is set so the credential authenticates against the gov login endpoint.
+> See the [Knowledge Base & Search Guide — Gov Cloud](knowledge-search-guide.md#sovereign--government-clouds)
+> for details.
+
 See the [Knowledge Base & Search Guide](knowledge-search-guide.md) for
 full architecture details, supported index field names, and troubleshooting.
 
@@ -581,6 +622,8 @@ az containerapp update \
 |-------|-------|------------|
 | `DefaultAzureCredential failed` | No valid credentials found | Run `az login` (local) or check service principal env vars (Docker) or managed identity (ACA) |
 | `DefaultAzureCredential` fails with gov/sovereign credentials | Wrong authority host | Set `AZURE_AUTHORITY_HOST` to the correct sovereign cloud URL (see [Sovereign / Government Clouds](#sovereign--government-clouds)) |
+| `invalid_scope 400` on OpenAI / model calls | Default token scope rejected by sovereign cloud | Set `AZURE_OPENAI_TOKEN_SCOPE=https://cognitiveservices.azure.us/.default` (US Gov). The platform auto-detects this for known gov authority hosts, but set it explicitly if auto-detection doesn't apply |
+| `invalid_scope 400` on search queries (gov cloud) | `SearchClient` using commercial audience | Ensure your search endpoint uses `.search.azure.us` — the provider auto-detects it and sets the correct audience. Also set `AZURE_AUTHORITY_HOST` so the credential authenticates against the gov login endpoint |
 | `failed to resolve registry 'xxx.azurecr.io'` (gov/sovereign cloud) | Wrong ACR suffix in image reference | Use the correct suffix for your cloud: `azurecr.us` (US Gov), `azurecr.cn` (China). Bicep resolves this automatically; check notebook `ACR_SUFFIX` or GitHub Actions `ACR_SUFFIX` variable |
 | `Connection refused on :8088` | Agent not starting | Check `AGENT_NAME` matches a registered agent; check container logs |
 | `Model deployment not found` | Wrong deployment name | Verify `AGENT_DEPLOYMENT_NAME` or agent config matches a deployment in your Foundry project |

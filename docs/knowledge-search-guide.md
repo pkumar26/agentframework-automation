@@ -72,12 +72,21 @@ setup:
 Set both values directly:
 
 ```bash
-# .env
+# .env (commercial cloud)
 AZURE_AI_SEARCH_ENDPOINT=https://<search-service>.search.windows.net
+AZURE_AI_SEARCH_INDEX_NAME=<index-name>
+
+# .env (US Government)
+AZURE_AI_SEARCH_ENDPOINT=https://<search-service>.search.azure.us
 AZURE_AI_SEARCH_INDEX_NAME=<index-name>
 ```
 
 Use this when you know the exact search service URL and index name.
+
+> **Gov cloud:** The provider auto-detects `.azure.us` endpoints and sets the
+> correct token audience (`https://search.azure.us`) on the `SearchClient`
+> automatically. No extra configuration is needed beyond using the correct
+> endpoint URL.
 
 ### Option B: Foundry Knowledge Base Name
 
@@ -246,6 +255,7 @@ and read automatically from environment variables:
 | `AZURE_AI_SEARCH_KNOWLEDGE_BASE` | `azure_ai_search_knowledge_base` | Option B | Foundry knowledge base name |
 | `AZURE_AI_SEARCH_SEMANTIC_CONFIG` | `azure_ai_search_semantic_config` | No | Semantic configuration name |
 | `AZURE_AI_SEARCH_INDEXES` | `azure_ai_search_indexes` | Option C | JSON array of `{endpoint, index_name, semantic_config}` objects |
+| `AZURE_AUTHORITY_HOST` | `azure_authority_host` | Gov cloud | Authority URL — affects how the search credential authenticates (see [Gov Cloud](#sovereign--government-clouds)) |
 
 If none of these are set, agents run without search grounding (model-only).
 
@@ -257,7 +267,11 @@ The integration is built from two components:
 
 A `BaseContextProvider` subclass that:
 
-- Creates a `SearchClient` with `DefaultAzureCredential`
+- Accepts a `credential` parameter (a `DefaultAzureCredential` instance
+  created by `agent_factory.py` with the correct authority for your cloud)
+- Auto-detects government cloud endpoints (`.azure.us`) and sets the
+  `SearchClient` audience to `https://search.azure.us` so token requests
+  use the correct scope
 - In `before_run()`, extracts the user query and calls `SearchClient.search()`
 - Looks for content in fields named `content`, `chunk`, or `snippet`
   (falls back to the first long string field)
@@ -269,10 +283,14 @@ A `BaseContextProvider` subclass that:
 
 Called by `create_agent()` to wire up providers at assembly time:
 
-1. Checks for explicit `endpoint` + `index_name` in config (Option A)
-2. If not found, tries to resolve `knowledge_base` via the Foundry API (Option B)
-3. Iterates `azure_ai_search_indexes` and creates a provider per entry (Option C)
-4. Returns the combined providers list passed to `client.as_agent(context_providers=...)`
+1. Creates a `DefaultAzureCredential` with the configured `authority` (from
+   `AZURE_AUTHORITY_HOST`) so that sovereign cloud identities authenticate
+   against the correct login endpoint
+2. Checks for explicit `endpoint` + `index_name` in config (Option A)
+3. If not found, tries to resolve `knowledge_base` via the Foundry API (Option B)
+4. Iterates `azure_ai_search_indexes` and creates a provider per entry (Option C)
+5. Passes the shared credential to every `AzureAISearchContextProvider`
+6. Returns the combined providers list passed to `client.as_agent(context_providers=...)`
 
 All providers run independently — each queries its own index and injects
 results into the agent's context.
@@ -292,6 +310,41 @@ The provider auto-detects content from these field names (in priority order):
 If none of these match, the provider falls back to the first string field
 longer than 50 characters (skipping `@search.*` metadata and `*_vector` fields).
 
+## Sovereign / Government Clouds
+
+[![US Government](https://img.shields.io/badge/Azure-US%20Government-003366?logo=microsoftazure&logoColor=white)](https://learn.microsoft.com/azure/azure-government/)
+
+Search grounding works on sovereign clouds (US Government, China) with no
+extra code changes. The platform handles two gov-specific requirements
+automatically:
+
+### Credential Authority
+
+When `AZURE_AUTHORITY_HOST` is set (e.g., `https://login.microsoftonline.us`),
+`agent_factory.py` creates a `DefaultAzureCredential` with the matching
+`authority` and passes it to every search provider. This ensures managed
+identity / CLI tokens are requested from the correct login endpoint.
+
+### Search Token Audience
+
+The `SearchClient` SDK defaults to commercial Azure scope
+(`https://search.windows.net`). On government cloud this produces an
+`invalid_scope 400` error. The provider auto-detects `.azure.us` in the
+endpoint URL and overrides the audience to `https://search.azure.us`.
+
+### What You Need to Set
+
+| Cloud | Search Endpoint | Additional Env Vars |
+|-------|----------------|---------------------|
+| Commercial (default) | `https://<name>.search.windows.net` | None |
+| US Government | `https://<name>.search.azure.us` | `AZURE_AUTHORITY_HOST=https://login.microsoftonline.us` |
+| China (21Vianet) | `https://<name>.search.azure.cn` | `AZURE_AUTHORITY_HOST=https://login.chinacloudapi.cn` |
+
+All other search configuration (Options A, B, C, RBAC, semantic config)
+works identically across clouds.
+
+---
+
 ## Troubleshooting
 
 ### Agent answers from general knowledge, not the knowledge base
@@ -307,6 +360,18 @@ longer than 50 characters (skipping `@search.*` metadata and `*_vector` fields).
 
 Your identity lacks the **Search Index Data Reader** role. See
 [RBAC / Permissions](#rbac--permissions) above.
+
+### `invalid_scope 400` on search queries (gov cloud)
+
+The `SearchClient` is requesting a token for the wrong audience. This
+happens when:
+
+- Your endpoint is `.search.azure.us` but the SDK uses the default
+  commercial audience — the provider handles this automatically, so
+  ensure you're on the latest code
+- `AZURE_AUTHORITY_HOST` is not set — the credential authenticates
+  against commercial Azure and the resulting token is rejected by gov
+  cloud search. Set `AZURE_AUTHORITY_HOST=https://login.microsoftonline.us`
 
 ### Knowledge base name not found
 
@@ -325,6 +390,7 @@ names in the Azure portal (Search service → Indexes → Fields) and see
 - Verify the search endpoint URL is correct and reachable
 - Confirm the index name exists on that search service
 - Check that `DefaultAzureCredential` can authenticate (run `az account show`)
+- For gov cloud: ensure `AZURE_AUTHORITY_HOST` is set correctly
 
 ### Multiple indexes: some work, some don't
 

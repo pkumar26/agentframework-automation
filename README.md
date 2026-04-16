@@ -295,9 +295,17 @@ Secrets are configured per GitHub Environment (`dev`, `qa`, `prod`):
 | Variable | `AZURE_AI_PROJECT_ENDPOINT` | Foundry project endpoint URL |
 | Variable | `ACR_NAME` | Azure Container Registry name |
 | Variable | `AZURE_RESOURCE_GROUP` | Target resource group |
+| Variable | `ACA_ENVIRONMENT` | ACA environment name |
+
+**Optional variables** (sovereign / government clouds):
+
+| Type | Name | Description |
+|------|------|-------------|
+| Variable | `AZURE_AUTHORITY_HOST` | Authority URL for sovereign clouds (e.g., `https://login.microsoftonline.us` for US Gov) |
+| Variable | `AZURE_OPENAI_TOKEN_SCOPE` | Token scope override (e.g., `https://cognitiveservices.azure.us/.default` for US Gov) |
+| Variable | `ACR_SUFFIX` | ACR domain suffix (default: `azurecr.io`; US Gov: `azurecr.us`; China: `azurecr.cn`) |
 
 > **OIDC**: Authentication uses Workload Identity Federation — no client secrets. See the [Deployment Guide](docs/deployment-guide.md#authentication) for setup.
-| Variable | `ACA_ENVIRONMENT` | ACA environment name |
 
 ## License
 
