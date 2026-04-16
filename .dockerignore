@@ -26,6 +26,10 @@ Dockerfile
 docker-compose.yml
 .dockerignore
 
+# Environment files (may contain secrets)
+.env
+.env.*
+
 # Dev/test files
 test.http
 testwithrest.http

@@ -3,13 +3,8 @@ services:
     build: .
     ports:
       - "8088:8088"
-    environment:
-      - AGENT_NAME=${AGENT_NAME:-code-helper}
-      - AZURE_AI_PROJECT_ENDPOINT=${AZURE_AI_PROJECT_ENDPOINT}
-      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
-      - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
-      # WARNING: For production, use Docker secrets or Azure Key Vault
-      # instead of passing secrets via environment variables.
-      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}
     env_file:
       - .env
+    environment:
+      # Override or provide defaults on top of .env values.
+      - AGENT_NAME=${AGENT_NAME:-code-helper}

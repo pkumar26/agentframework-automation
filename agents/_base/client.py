@@ -13,7 +13,7 @@ from azure.identity import DefaultAzureCredential
 logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
-_credential = None
+_credentials: dict[str | None, DefaultAzureCredential] = {}
 
 # Sovereign cloud default token scope (used when no explicit scope is configured).
 _GOV_AUTHORITY_FRAGMENT = "login.microsoftonline.us"
@@ -27,15 +27,14 @@ def get_credential(authority: str | None = None):
         authority: Azure authority host URL for sovereign clouds.
             Defaults to commercial cloud when not set.
     """
-    global _credential
     with _lock:
-        if _credential is None:
+        if authority not in _credentials:
             kwargs = {}
             if authority:
                 kwargs["authority"] = authority
             logger.info("Creating DefaultAzureCredential (authority=%s)", authority or "default")
-            _credential = DefaultAzureCredential(**kwargs)
-        return _credential
+            _credentials[authority] = DefaultAzureCredential(**kwargs)
+        return _credentials[authority]
 
 
 def get_chat_client(
@@ -87,7 +86,6 @@ def get_chat_client(
 
 
 def reset_credential() -> None:
-    """Reset the shared credential. Used for testing."""
-    global _credential
+    """Reset the shared credentials. Used for testing."""
     with _lock:
-        _credential = None
+        _credentials.clear()

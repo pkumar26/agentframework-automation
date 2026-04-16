@@ -18,6 +18,9 @@ def mock_config():
     config.azure_ai_search_index_name = None
     config.azure_ai_search_semantic_config = None
     config.azure_ai_search_knowledge_base = None
+    config.azure_ai_search_indexes = None
+    config.azure_authority_host = None
+    config.azure_openai_token_scope = None
     config.mcp_servers = None
     return config
 
