@@ -63,9 +63,11 @@ setup:
 | You have a search service URL and index name | [Option A](#option-a-explicit-endpoint--index-name) | `AZURE_AI_SEARCH_ENDPOINT` + `AZURE_AI_SEARCH_INDEX_NAME` |
 | Your index is registered in Azure AI Foundry | [Option B](#option-b-foundry-knowledge-base-name) | `AZURE_AI_SEARCH_KNOWLEDGE_BASE` |
 | You need to search **multiple** indexes | [Option C](#option-c-multiple-search-indexes) | `AZURE_AI_SEARCH_INDEXES` (JSON array) |
+| Each agent needs its **own** index(es) | [Option D](#option-d-agent-specific-knowledge-per-agent-indexes) | `{AGENT}_SEARCH_ENDPOINT` + `{AGENT}_SEARCH_INDEX_NAME` (+ optional `{AGENT}_SEARCH_INDEXES` JSON array) |
 
-> **Tip:** Options are additive. You can combine Option A or B with Option C
-> to search a primary index plus additional ones.
+> **Tip:** Options A/B/C are additive shared config. Option D overrides
+> A/B/C per-agent — if an agent's `knowledge.py` returns providers,
+> the shared config is skipped for that agent.
 
 ### Option A: Explicit Endpoint + Index Name
 
@@ -175,12 +177,103 @@ each turn. The agent sees them as a single merged set of search results.
 > Reader** RBAC role assigned to the running identity. See
 > [RBAC / Permissions](#rbac--permissions).
 
+### Option D: Agent-Specific Knowledge (Per-Agent Indexes)
+
+When deploying **multiple agents** together, each agent can have its own
+search index via agent-prefixed environment variables. This is configured
+in each agent's `integrations/knowledge.py` file.
+
+**How it works:**
+
+Each agent's `knowledge.py` exports a `get_context_providers(config)` function.
+The factory calls it before falling back to the shared base-config env vars:
+
+1. If the function returns a **list** → those providers are used (agent takes control)
+2. If the function returns **`None`** → falls back to base-config Options A/B/C
+3. If the module doesn't exist → falls back to base-config Options A/B/C
+
+**Example — give each agent its own index:**
+
+```bash
+# .env — each agent searches a different index
+CODE_HELPER_SEARCH_ENDPOINT=https://search.search.windows.net
+CODE_HELPER_SEARCH_INDEX_NAME=code-docs
+CODE_HELPER_SEARCH_SEMANTIC_CONFIG=code-semantic
+
+DOC_ASSISTANT_SEARCH_ENDPOINT=https://search.search.windows.net
+DOC_ASSISTANT_SEARCH_INDEX_NAME=product-docs
+DOC_ASSISTANT_SEARCH_SEMANTIC_CONFIG=docs-semantic
+```
+
+**Example — give one agent multiple indexes:**
+
+Like Option C for shared config, each agent also supports a JSON array of
+indexes via `{AGENT}_SEARCH_INDEXES`. Single and multi are additive:
+
+```bash
+# .env — code-helper searches 3 indexes total (1 single + 2 from JSON)
+CODE_HELPER_SEARCH_ENDPOINT=https://search.search.windows.net
+CODE_HELPER_SEARCH_INDEX_NAME=code-docs
+CODE_HELPER_SEARCH_INDEXES=[{"endpoint":"https://search.search.windows.net","index_name":"api-ref"},{"endpoint":"https://s2.search.windows.net","index_name":"samples","semantic_config":"samples-sem"}]
+```
+
+The env var prefix is derived from the agent's module name in UPPER_SNAKE_CASE:
+
+| Agent Name | Module | Env Var Prefix |
+|-----------|--------|----------------|
+| `code-helper` | `code_helper` | `CODE_HELPER_` |
+| `doc-assistant` | `doc_assistant` | `DOC_ASSISTANT_` |
+| `my-new-agent` | `my_new_agent` | `MY_NEW_AGENT_` |
+
+**When to use this:**
+
+- Multiple agents deployed in the same container, each needing different data
+- You want per-agent search config without separate deployments
+- Agent needs a knowledge base that other agents shouldn't see
+
+**How it combines with base config:**
+
+Agent-specific config **overrides** base config — it does NOT combine with it.
+If `CODE_HELPER_SEARCH_ENDPOINT` and `CODE_HELPER_SEARCH_INDEX_NAME` are set,
+the `code-helper` agent uses only that index. The shared `AZURE_AI_SEARCH_*`
+vars are ignored for that agent (but still apply to any agent whose
+`knowledge.py` returns `None`).
+
+**Customising `knowledge.py`:**
+
+The scaffolded `knowledge.py` supports both a single index and a JSON array
+of multiple indexes out of the box. For fully custom logic (e.g. hardcoded
+indexes or conditional logic), edit the function directly:
+
+```python
+# agents/my_agent/integrations/knowledge.py
+def get_context_providers(config):
+    """Return agent-specific context providers."""
+    from agents._base.client import get_credential
+    from agents._base.integrations.search import AzureAISearchContextProvider
+
+    credential = get_credential(authority=config.azure_authority_host)
+    return [
+        AzureAISearchContextProvider(
+            endpoint="https://search.search.windows.net",
+            index_name="primary-index",
+            credential=credential,
+        ),
+        AzureAISearchContextProvider(
+            endpoint="https://search.search.windows.net",
+            index_name="secondary-index",
+            semantic_config="my-semantic",
+            credential=credential,
+        ),
+    ]
+```
+
 ## RBAC / Permissions
 
 ![RBAC](https://img.shields.io/badge/RBAC-Search%20Index%20Data%20Reader-green?logo=microsoftazure&logoColor=white)
 
 The identity running the agent needs the **Search Index Data Reader** role on
-**every** Azure AI Search service referenced in your config (Option A, B, or C).
+**every** Azure AI Search service referenced in your config (Options A, B, C, or D).
 
 ### Local Development
 
@@ -255,6 +348,10 @@ and read automatically from environment variables:
 | `AZURE_AI_SEARCH_KNOWLEDGE_BASE` | `azure_ai_search_knowledge_base` | Option B | Foundry knowledge base name |
 | `AZURE_AI_SEARCH_SEMANTIC_CONFIG` | `azure_ai_search_semantic_config` | No | Semantic configuration name |
 | `AZURE_AI_SEARCH_INDEXES` | `azure_ai_search_indexes` | Option C | JSON array of `{endpoint, index_name, semantic_config}` objects |
+| `{AGENT}_SEARCH_ENDPOINT` | — | Option D | Per-agent search endpoint (e.g. `CODE_HELPER_SEARCH_ENDPOINT`) |
+| `{AGENT}_SEARCH_INDEX_NAME` | — | Option D | Per-agent index name |
+| `{AGENT}_SEARCH_SEMANTIC_CONFIG` | — | Option D | Per-agent semantic config (optional) |
+| `{AGENT}_SEARCH_INDEXES` | — | Option D | Per-agent JSON array of indexes (additive with single) |
 | `AZURE_AUTHORITY_HOST` | `azure_authority_host` | Gov cloud | Authority URL — affects how the search credential authenticates (see [Gov Cloud](#sovereign--government-clouds)) |
 
 If none of these are set, agents run without search grounding (model-only).
@@ -283,14 +380,15 @@ A `BaseContextProvider` subclass that:
 
 Called by `create_agent()` to wire up providers at assembly time:
 
-1. Creates a `DefaultAzureCredential` with the configured `authority` (from
-   `AZURE_AUTHORITY_HOST`) so that sovereign cloud identities authenticate
-   against the correct login endpoint
-2. Checks for explicit `endpoint` + `index_name` in config (Option A)
-3. If not found, tries to resolve `knowledge_base` via the Foundry API (Option B)
-4. Iterates `azure_ai_search_indexes` and creates a provider per entry (Option C)
-5. Passes the shared credential to every `AzureAISearchContextProvider`
-6. Returns the combined providers list passed to `client.as_agent(context_providers=...)`
+1. Calls `_discover_agent_context_providers(config)` to check for an
+   agent-specific `knowledge.py` module (Option D)
+2. If discovery returns a list (even empty), uses it — **skips base config**
+3. If discovery returns `None`, falls back to base config:
+   a. Creates a `DefaultAzureCredential` with the configured `authority`
+   b. Checks for explicit `endpoint` + `index_name` in config (Option A)
+   c. If not found, tries to resolve `knowledge_base` via the Foundry API (Option B)
+   d. Iterates `azure_ai_search_indexes` and creates a provider per entry (Option C)
+4. Returns the combined providers list passed to `client.as_agent(context_providers=...)`
 
 All providers run independently — each queries its own index and injects
 results into the agent's context.
@@ -340,7 +438,7 @@ endpoint URL and overrides the audience to `https://search.azure.us`.
 | US Government | `https://<name>.search.azure.us` | `AZURE_AUTHORITY_HOST=https://login.microsoftonline.us` |
 | China (21Vianet) | `https://<name>.search.azure.cn` | `AZURE_AUTHORITY_HOST=https://login.chinacloudapi.cn` |
 
-All other search configuration (Options A, B, C, RBAC, semantic config)
+All other search configuration (Options A, B, C, D, RBAC, semantic config)
 works identically across clouds.
 
 ---
@@ -349,7 +447,7 @@ works identically across clouds.
 
 ### Agent answers from general knowledge, not the knowledge base
 
-- Verify `.env` has the search config (Option A, B, or C)
+- Verify `.env` has the search config (Option A, B, C, or D)
 - Check agent logs for `Enabled Azure AI Search context provider`
   (one line per index when using Option C)
 - Check for `Injected N search results` in logs during conversations

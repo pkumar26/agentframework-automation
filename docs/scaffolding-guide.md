@@ -116,7 +116,7 @@ agents/{module_name}/
 │   └── sample_tool.py       # Sample greeting tool (plain function)
 └── integrations/
     ├── __init__.py          # Package init
-    └── knowledge.py         # Knowledge source stub (returns None when disabled)
+    └── knowledge.py         # Agent-specific knowledge config (single + multi-index via {AGENT}_SEARCH_* env vars)
 
 tests/{module_name}/
 ├── __init__.py              # Package init
@@ -187,7 +187,25 @@ class MyAgentConfig(AgentBaseConfig):
 > The `_IDENTITY_ALIAS` sentinel prevents this for `agent_name`,
 > `agent_deployment_name`, and `agent_instructions_path`.
 
-### 4. Write Tests
+### 4. Configure Knowledge Base (Optional)
+
+The scaffolded `knowledge.py` supports single and multi-index search out of the box.
+Set these env vars to give your agent its own search data:
+
+```bash
+# Single index
+MY_AGENT_SEARCH_ENDPOINT=https://<search>.search.windows.net
+MY_AGENT_SEARCH_INDEX_NAME=<index>
+MY_AGENT_SEARCH_SEMANTIC_CONFIG=<semantic-config>   # optional
+
+# Multiple indexes (additive with single)
+MY_AGENT_SEARCH_INDEXES='[{"endpoint":"https://...","index_name":"extra-index"}]'
+```
+
+If none of these are set, the agent falls back to the shared `AZURE_AI_SEARCH_*` config.
+See the [Knowledge & Search Guide](knowledge-search-guide.md#option-d-agent-specific-knowledge-per-agent-indexes) for full details.
+
+### 5. Write Tests
 
 Update the generated test stubs in `tests/{module_name}/` with real assertions:
 
@@ -196,7 +214,7 @@ Update the generated test stubs in `tests/{module_name}/` with real assertions:
 pytest tests/my_agent/ -v
 ```
 
-### 5. Run Your Agent
+### 6. Run Your Agent
 
 ```bash
 # Interactive CLI

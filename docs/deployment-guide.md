@@ -325,7 +325,12 @@ Bicep handles the rolling update — ACA provisions a new revision with the new 
 | `AZURE_AI_SEARCH_ENDPOINT` | For search grounding | Azure AI Search service URL (e.g., `https://<name>.search.windows.net`) |
 | `AZURE_AI_SEARCH_INDEX_NAME` | For search grounding | Name of the search index to query |
 | `AZURE_AI_SEARCH_SEMANTIC_CONFIG` | No | Semantic configuration name for higher-quality ranking |
+| `AZURE_AI_SEARCH_KNOWLEDGE_BASE` | No | Foundry knowledge base name (auto-resolves endpoint + index) — see [Option B](knowledge-search-guide.md#option-b-foundry-knowledge-base-name) |
 | `AZURE_AI_SEARCH_INDEXES` | No | JSON array of multiple search indexes (see [Knowledge Base & Search Guide](knowledge-search-guide.md#option-c-multiple-search-indexes)) |
+| `{AGENT}_SEARCH_ENDPOINT` | No | Per-agent search endpoint (e.g., `CODE_HELPER_SEARCH_ENDPOINT`) — see [Option D](knowledge-search-guide.md#option-d-agent-specific-knowledge-per-agent-indexes) |
+| `{AGENT}_SEARCH_INDEX_NAME` | No | Per-agent index name (e.g., `CODE_HELPER_SEARCH_INDEX_NAME`) |
+| `{AGENT}_SEARCH_SEMANTIC_CONFIG` | No | Per-agent semantic config (e.g., `CODE_HELPER_SEARCH_SEMANTIC_CONFIG`) |
+| `{AGENT}_SEARCH_INDEXES` | No | Per-agent JSON array of indexes, additive with single (e.g., `CODE_HELPER_SEARCH_INDEXES`) |
 
 If none of the search variables are set, agents run without search grounding (model-only).
 See the [Knowledge Base & Search Guide](knowledge-search-guide.md) for full details.
@@ -477,6 +482,10 @@ and conditionally includes them when set.
 | `AZURE_AI_SEARCH_INDEX_NAME` | `<index-name>` | Yes |
 | `AZURE_AI_SEARCH_SEMANTIC_CONFIG` | `<semantic-config-name>` | No |
 | `AZURE_AI_SEARCH_INDEXES` | JSON array of `{endpoint, index_name, semantic_config}` | No |
+| `CODE_HELPER_SEARCH_ENDPOINT` | Per-agent search endpoint (Option D) | No |
+| `CODE_HELPER_SEARCH_INDEX_NAME` | Per-agent index name (Option D) | No |
+| `{AGENT}_SEARCH_SEMANTIC_CONFIG` | Per-agent semantic config (Option D) | No |
+| `{AGENT}_SEARCH_INDEXES` | Per-agent JSON array of indexes, additive (Option D) | No |
 
 If these variables are not set, the workflow deploys agents without search
 grounding — no errors, just model-only answers.

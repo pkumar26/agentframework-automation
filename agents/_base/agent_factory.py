@@ -167,13 +167,76 @@ def _collect_agent_tools(config: AgentBaseConfig) -> list:
 
 
 def _collect_context_providers(config: AgentBaseConfig) -> list:
-    """Build context providers based on config.
+    """Build context providers for the agent.
 
-    Supports Azure AI Search via explicit endpoint + index, via a Foundry
-    knowledge base name (resolved through the project connections API),
-    and via a list of multiple search indexes.
-    All sources are additive — providers from single-index config and
-    the azure_ai_search_indexes list are combined.
+    First checks for agent-specific providers via the agent's
+    ``integrations.knowledge`` module (``get_context_providers(config)``).
+    If that returns a list, those providers are used exclusively.
+    Otherwise falls back to the shared base-config search settings
+    (Options A / B / C from env vars).
+    """
+    # --- Agent-specific providers (priority) ---
+    agent_providers = _discover_agent_context_providers(config)
+    if agent_providers is not None:
+        return agent_providers
+
+    # --- Base-config providers (fallback) ---
+    return _build_base_context_providers(config)
+
+
+def _discover_agent_context_providers(config: AgentBaseConfig) -> list | None:
+    """Discover context providers from the agent's knowledge module.
+
+    Looks for ``get_context_providers(config)`` in
+    ``agents.{name}.integrations.knowledge``.
+
+    Returns:
+        A list of providers if the function exists and returns one,
+        or None to signal "not configured — use base config".
+    """
+    config_module = getattr(type(config), "__module__", "")
+    if config_module.startswith("agents.") and config_module.endswith(".config"):
+        agent_package = config_module.rsplit(".", 1)[0]
+        knowledge_module_path = f"{agent_package}.integrations.knowledge"
+    else:
+        module_name = config.agent_name.replace("-", "_")
+        knowledge_module_path = f"agents.{module_name}.integrations.knowledge"
+
+    try:
+        knowledge_module = importlib.import_module(knowledge_module_path)
+    except ModuleNotFoundError:
+        return None
+
+    fn = getattr(knowledge_module, "get_context_providers", None)
+    if fn is None:
+        return None
+
+    result = fn(config)
+    if result is None:
+        return None  # Agent defers to base config
+
+    if not isinstance(result, list):
+        logger.warning(
+            "get_context_providers() in %s returned %s instead of list — ignoring",
+            knowledge_module_path,
+            type(result).__name__,
+        )
+        return None
+
+    logger.info(
+        "Using %d agent-specific context provider(s) from %s",
+        len(result),
+        knowledge_module_path,
+    )
+    return result
+
+
+def _build_base_context_providers(config: AgentBaseConfig) -> list:
+    """Build context providers from shared base config (env vars).
+
+    Supports Azure AI Search via explicit endpoint + index (Option A),
+    via a Foundry knowledge base name (Option B), and via a list of
+    multiple search indexes (Option C).  All sources are additive.
     """
     providers = []
 

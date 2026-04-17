@@ -121,10 +121,14 @@ agentframework-automation/
 │   ├── code_helper/           # Example: tool-augmented agent
 │   │   ├── config.py
 │   │   ├── instructions.md
-│   │   └── tools/
+│   │   ├── tools/
+│   │   └── integrations/
+│   │       └── knowledge.py   # Agent-specific search config
 │   └── doc_assistant/         # Example: instruction-only agent
 │       ├── config.py
-│       └── instructions.md
+│       ├── instructions.md
+│       └── integrations/
+│           └── knowledge.py
 ├── infra/                     # Bicep infrastructure (from ACA-BICEP-Actions)
 │   ├── main.bicep             # Orchestrator — wires all modules
 │   ├── modules/
@@ -154,6 +158,8 @@ python scripts/create_agent.py --name my-agent
 # Remove it
 python scripts/delete_agent.py --name my-agent
 ```
+
+See the [Scaffolding Guide](docs/scaffolding-guide.md) for YAML format, generated file details, and customisation steps.
 
 ## Infrastructure
 
@@ -213,7 +219,7 @@ See the [Deployment Guide](docs/deployment-guide.md) for full setup, managed ide
 Ground your agents on your own data using Azure AI Search. When enabled, the agent queries your search index before every model turn and injects the top results as context — so it answers **only** from your knowledge base.
 
 ```bash
-# .env — pick one approach:
+# .env — shared config (all agents use the same index):
 
 # Option A: Explicit endpoint + index
 AZURE_AI_SEARCH_ENDPOINT=https://<search-service>.search.windows.net
@@ -221,9 +227,19 @@ AZURE_AI_SEARCH_INDEX_NAME=<index-name>
 
 # Option B: Foundry knowledge base name (auto-resolves endpoint + index)
 AZURE_AI_SEARCH_KNOWLEDGE_BASE=<knowledge-base-name>
+
+# Option C: Multiple shared indexes (JSON array — all agents share these)
+AZURE_AI_SEARCH_INDEXES='[{"endpoint":"https://...","index_name":"docs"},{"endpoint":"https://...","index_name":"faq"}]'
+
+# Option D: Per-agent indexes (each agent searches its own data)
+CODE_HELPER_SEARCH_ENDPOINT=https://<search-service>.search.windows.net
+CODE_HELPER_SEARCH_INDEX_NAME=code-docs
+CODE_HELPER_SEARCH_INDEXES='[{"endpoint":"https://...","index_name":"api-ref"}]'  # additive
+DOC_ASSISTANT_SEARCH_ENDPOINT=https://<search-service>.search.windows.net
+DOC_ASSISTANT_SEARCH_INDEX_NAME=product-docs
 ```
 
-All agents automatically pick up the search config — no per-agent changes needed. See the [Knowledge & Search Guide](docs/knowledge-search-guide.md) for full setup, RBAC, semantic search, and troubleshooting.
+Shared config (Options A/B/C) applies to all agents. Per-agent config (Option D) overrides it for individual agents via `integrations/knowledge.py`. See the [Knowledge & Search Guide](docs/knowledge-search-guide.md) for full setup, RBAC, semantic search, and troubleshooting.
 
 ## Notebooks
 

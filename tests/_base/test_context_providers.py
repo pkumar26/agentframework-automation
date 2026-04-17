@@ -1,10 +1,15 @@
-"""Unit tests for _collect_context_providers in agent_factory."""
+"""Unit tests for _collect_context_providers and agent-specific discovery."""
 
+import types
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agents._base.agent_factory import _collect_context_providers
+from agents._base.agent_factory import (
+    _build_base_context_providers,
+    _collect_context_providers,
+    _discover_agent_context_providers,
+)
 from agents._base.config import SearchIndexConfig
 
 
@@ -145,3 +150,114 @@ class TestCollectContextProviders:
             mock_resolve.assert_not_called()
 
         assert len(result) == 1
+
+
+class TestDiscoverAgentContextProviders:
+    """Tests for _discover_agent_context_providers."""
+
+    def test_returns_none_when_no_module(self, base_config):
+        """Should return None when the knowledge module doesn't exist."""
+        base_config.agent_name = "nonexistent-agent"
+        result = _discover_agent_context_providers(base_config)
+        assert result is None
+
+    def test_returns_none_when_no_function(self, base_config):
+        """Should return None when module exists but lacks get_context_providers."""
+        mod = types.ModuleType("agents.fake.integrations.knowledge")
+        # Module has no get_context_providers function
+        with patch("importlib.import_module", return_value=mod):
+            base_config.agent_name = "fake"
+            result = _discover_agent_context_providers(base_config)
+        assert result is None
+
+    def test_returns_none_when_function_returns_none(self, base_config):
+        """Should return None when get_context_providers returns None (defer)."""
+        mod = types.ModuleType("agents.fake.integrations.knowledge")
+        mod.get_context_providers = lambda config: None
+        with patch("importlib.import_module", return_value=mod):
+            base_config.agent_name = "fake"
+            result = _discover_agent_context_providers(base_config)
+        assert result is None
+
+    def test_returns_list_from_function(self, base_config):
+        """Should return the list from get_context_providers."""
+        provider = MagicMock()
+        mod = types.ModuleType("agents.fake.integrations.knowledge")
+        mod.get_context_providers = lambda config: [provider]
+        with patch("importlib.import_module", return_value=mod):
+            base_config.agent_name = "fake"
+            result = _discover_agent_context_providers(base_config)
+        assert result == [provider]
+
+    def test_returns_empty_list_as_override(self, base_config):
+        """Should return empty list (agent explicitly has no search)."""
+        mod = types.ModuleType("agents.fake.integrations.knowledge")
+        mod.get_context_providers = lambda config: []
+        with patch("importlib.import_module", return_value=mod):
+            base_config.agent_name = "fake"
+            result = _discover_agent_context_providers(base_config)
+        assert result == []
+
+    def test_returns_none_for_non_list_return(self, base_config):
+        """Should return None and warn when function returns non-list."""
+        mod = types.ModuleType("agents.fake.integrations.knowledge")
+        mod.get_context_providers = lambda config: "bad"
+        with patch("importlib.import_module", return_value=mod):
+            base_config.agent_name = "fake"
+            result = _discover_agent_context_providers(base_config)
+        assert result is None
+
+    def test_derives_module_from_config_class(self):
+        """Should use config class __module__ to derive knowledge module path."""
+        provider = MagicMock()
+        mod = types.ModuleType("agents.my_agent.integrations.knowledge")
+        mod.get_context_providers = lambda config: [provider]
+
+        config = MagicMock()
+        type(config).__module__ = "agents.my_agent.config"
+
+        with patch("importlib.import_module", return_value=mod) as mock_import:
+            result = _discover_agent_context_providers(config)
+
+        mock_import.assert_called_with("agents.my_agent.integrations.knowledge")
+        assert result == [provider]
+
+
+class TestCollectWithDiscovery:
+    """Tests for _collect_context_providers with discovery integration."""
+
+    @patch("agents._base.agent_factory._discover_agent_context_providers")
+    def test_uses_agent_providers_when_returned(self, mock_discover, base_config):
+        """Should use agent-specific providers and skip base config."""
+        agent_provider = MagicMock()
+        mock_discover.return_value = [agent_provider]
+
+        result = _collect_context_providers(base_config)
+
+        assert result == [agent_provider]
+
+    @patch("agents._base.agent_factory._build_base_context_providers")
+    @patch("agents._base.agent_factory._discover_agent_context_providers")
+    def test_falls_back_to_base_when_discovery_returns_none(
+        self, mock_discover, mock_base, base_config
+    ):
+        """Should fall back to base config when discovery returns None."""
+        mock_discover.return_value = None
+        base_provider = MagicMock()
+        mock_base.return_value = [base_provider]
+
+        result = _collect_context_providers(base_config)
+
+        mock_base.assert_called_once_with(base_config)
+        assert result == [base_provider]
+
+    @patch("agents._base.agent_factory._discover_agent_context_providers")
+    def test_empty_list_overrides_base(self, mock_discover, base_config):
+        """Empty list from discovery should override base (no search)."""
+        mock_discover.return_value = []
+        base_config.azure_ai_search_endpoint = "https://should-be-skipped.search.windows.net"
+        base_config.azure_ai_search_index_name = "skipped"
+
+        result = _collect_context_providers(base_config)
+
+        assert result == []
