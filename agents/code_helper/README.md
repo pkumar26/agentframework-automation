@@ -31,6 +31,28 @@ A tool-augmented coding assistant built on the Agent Framework Platform.
 > **Note:** All settings are per-agent in `config.py`.
 > The `.env` file is for shared infrastructure only.
 
+### Per-Agent Knowledge Base
+
+Set agent-specific search indexes via env vars (overrides shared `AZURE_AI_SEARCH_*`):
+
+```bash
+CODE_HELPER_SEARCH_ENDPOINT=https://<search>.search.windows.net
+CODE_HELPER_SEARCH_INDEX_NAME=<index-name>
+CODE_HELPER_SEARCH_SEMANTIC_CONFIG=<semantic-config>   # optional
+```
+
+See `integrations/knowledge.py` and the [Knowledge & Search Guide](../../docs/knowledge-search-guide.md#option-d-agent-specific-knowledge-per-agent-indexes).
+
+### Per-Agent MCP Servers
+
+Give this agent its own MCP tools (overrides shared `MCP_SERVERS`):
+
+```bash
+CODE_HELPER_MCP_SERVERS='[{"name":"github","transport":"stdio","command":"npx","args":["-y","@modelcontextprotocol/server-github"]}]'
+```
+
+See the [Custom Tools Guide](../../docs/custom-tools-guide.md#mcp-servers).
+
 ## File Structure
 
 ```
@@ -41,7 +63,7 @@ agents/code_helper/
 ├── README.md              # This file
 ├── integrations/
 │   ├── __init__.py
-│   └── knowledge.py       # Knowledge integration stub
+│   └── knowledge.py       # Per-agent search config
 └── tools/
     ├── __init__.py
     └── sample_tool.py     # greet_user function

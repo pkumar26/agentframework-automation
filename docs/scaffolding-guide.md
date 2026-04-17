@@ -205,7 +205,20 @@ MY_AGENT_SEARCH_INDEXES='[{"endpoint":"https://...","index_name":"extra-index"}]
 If none of these are set, the agent falls back to the shared `AZURE_AI_SEARCH_*` config.
 See the [Knowledge & Search Guide](knowledge-search-guide.md#option-d-agent-specific-knowledge-per-agent-indexes) for full details.
 
-### 5. Write Tests
+### 5. Configure MCP Servers (Optional)
+
+Give your agent its own MCP tool servers (overrides shared `MCP_SERVERS`):
+
+```bash
+# Per-agent MCP (replaces shared MCP_SERVERS for this agent)
+MY_AGENT_MCP_SERVERS='[{"name":"github","transport":"stdio","command":"npx","args":["-y","@modelcontextprotocol/server-github"]}]'
+```
+
+Supported transports: `stdio`, `http`, `websocket`. If no per-agent var is set,
+the agent uses the shared `MCP_SERVERS` config.
+See the [Custom Tools Guide — MCP Servers](custom-tools-guide.md#mcp-servers) for full details.
+
+### 6. Write Tests
 
 Update the generated test stubs in `tests/{module_name}/` with real assertions:
 
@@ -214,7 +227,7 @@ Update the generated test stubs in `tests/{module_name}/` with real assertions:
 pytest tests/my_agent/ -v
 ```
 
-### 6. Run Your Agent
+### 7. Run Your Agent
 
 ```bash
 # Interactive CLI

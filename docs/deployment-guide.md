@@ -571,6 +571,78 @@ full architecture details, supported index field names, and troubleshooting.
 
 ---
 
+## MCP Servers (Tool Integration) in ACA
+
+[![MCP](https://img.shields.io/badge/MCP-Model%20Context%20Protocol-764ABC?logo=data:image/svg+xml;base64,&logoColor=white)](https://modelcontextprotocol.io/)
+
+MCP servers give agents access to external tools (GitHub, file systems, APIs).
+Configuration follows the same pattern as knowledge bases — shared + per-agent override.
+
+### 1. Pass MCP Variables at Deploy Time
+
+**Set these GitHub variables** (Settings → Variables and secrets → Actions → Variables):
+
+| GitHub Variable | Value | Required |
+|-----------------|-------|----------|
+| `MCP_SERVERS` | JSON array of MCP server configs (shared by all agents) | No |
+| `{AGENT}_MCP_SERVERS` | Per-agent override (e.g., `CODE_HELPER_MCP_SERVERS`) | No |
+
+The `deploy.yml` workflow reads these and injects them into `appEnvVars` automatically.
+Per-agent overrides **replace** the shared config entirely for that agent.
+
+**Manual CLI deployment** — add MCP vars to `appEnvVars`:
+
+```bash
+# Shared MCP for all agents
+az deployment group create \
+  --resource-group "$RG" \
+  --template-file infra/main.bicep \
+  --parameters environmentName=dev \
+  --parameters appName="$AGENT" \
+  --parameters containerImage="$IMAGE" \
+  --parameters acrResourceId="$ACR_RES_ID" \
+  --parameters "appEnvVars=[\
+    {\"name\":\"AGENT_NAME\",\"value\":\"$AGENT\"},\
+    {\"name\":\"AZURE_AI_PROJECT_ENDPOINT\",\"value\":\"$ENDPOINT\"},\
+    {\"name\":\"MCP_SERVERS\",\"value\":\"[{\\\"name\\\":\\\"github\\\",\\\"transport\\\":\\\"stdio\\\",\\\"command\\\":\\\"npx\\\",\\\"args\\\":[\\\"@modelcontextprotocol/server-github\\\"]}]\"},\
+    {\"name\":\"ENVIRONMENT\",\"value\":\"dev\"}\
+  ]" \
+  --mode Incremental
+```
+
+```bash
+# Per-agent MCP override
+az deployment group create \
+  --resource-group "$RG" \
+  --template-file infra/main.bicep \
+  --parameters environmentName=dev \
+  --parameters appName=code-helper \
+  --parameters containerImage="$IMAGE" \
+  --parameters acrResourceId="$ACR_RES_ID" \
+  --parameters "appEnvVars=[\
+    {\"name\":\"AGENT_NAME\",\"value\":\"code-helper\"},\
+    {\"name\":\"AZURE_AI_PROJECT_ENDPOINT\",\"value\":\"$ENDPOINT\"},\
+    {\"name\":\"CODE_HELPER_MCP_SERVERS\",\"value\":\"[{\\\"name\\\":\\\"github\\\",\\\"transport\\\":\\\"stdio\\\",\\\"command\\\":\\\"npx\\\",\\\"args\\\":[\\\"@modelcontextprotocol/server-github\\\"]}]\"},\
+    {\"name\":\"ENVIRONMENT\",\"value\":\"dev\"}\
+  ]" \
+  --mode Incremental
+```
+
+The `.bicepparam` files also contain commented-out MCP examples for reference.
+
+### How It Works
+
+No code changes are needed. `_resolve_mcp_servers()` in `agent_factory.py`
+checks for `{AGENT}_MCP_SERVERS` first, then falls back to shared `MCP_SERVERS`
+(from `config.mcp_servers`). The resolved servers are wrapped as
+`MCPStdioTool`, `MCPStreamableHTTPTool`, or `MCPWebsocketTool` depending
+on the `transport` field.
+
+See the [Custom Tools Guide — MCP Servers](custom-tools-guide.md#mcp-servers)
+for configuration schema, supported transports, and examples.
+
+---
+
 ## Multiple Agents
 
 Each agent runs as a **separate container app**, all sharing the same Docker image. With Bicep, each agent gets its own deployment with a unique `appName`:

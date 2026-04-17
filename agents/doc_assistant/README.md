@@ -21,6 +21,31 @@ An instruction-only documentation assistant built on the Agent Framework Platfor
 | Agent name | `agent_name` | `doc-assistant` | Registry identifier |
 | Model deployment | `agent_deployment_name` | `gpt-4o` | Azure AI Foundry deployment |
 
+> **Note:** All settings are per-agent in `config.py`.
+> The `.env` file is for shared infrastructure only.
+
+### Per-Agent Knowledge Base
+
+Set agent-specific search indexes via env vars (overrides shared `AZURE_AI_SEARCH_*`):
+
+```bash
+DOC_ASSISTANT_SEARCH_ENDPOINT=https://<search>.search.windows.net
+DOC_ASSISTANT_SEARCH_INDEX_NAME=<index-name>
+DOC_ASSISTANT_SEARCH_SEMANTIC_CONFIG=<semantic-config>   # optional
+```
+
+See `integrations/knowledge.py` and the [Knowledge & Search Guide](../../docs/knowledge-search-guide.md#option-d-agent-specific-knowledge-per-agent-indexes).
+
+### Per-Agent MCP Servers
+
+Give this agent its own MCP tools (overrides shared `MCP_SERVERS`):
+
+```bash
+DOC_ASSISTANT_MCP_SERVERS='[{"name":"github","transport":"stdio","command":"npx","args":["-y","@modelcontextprotocol/server-github"]}]'
+```
+
+See the [Custom Tools Guide](../../docs/custom-tools-guide.md#mcp-servers).
+
 ## File Structure
 
 ```
@@ -30,7 +55,8 @@ agents/doc_assistant/
 ├── instructions.md        # System prompt
 ├── README.md              # This file
 ├── integrations/
-│   └── __init__.py
+│   ├── __init__.py
+│   └── knowledge.py       # Per-agent search config
 └── tools/
     └── __init__.py
 ```
