@@ -191,6 +191,7 @@ def _template_readme(
 ) -> str:
     """Return README.md content for the scaffolded agent."""
     config_cls = f"{class_prefix}Config"
+    env_prefix = module_name.upper()
     return textwrap.dedent(f"""\
         # {display_name} Agent
 
@@ -223,6 +224,27 @@ def _template_readme(
         > **Note:** All settings are per-agent in `config.py`.
         > The `.env` file is for shared infrastructure only.
 
+        ### Per-Agent Knowledge Base
+
+        Set agent-specific search indexes via env vars (overrides shared `AZURE_AI_SEARCH_*`):
+
+        ```bash
+        {env_prefix}_SEARCH_ENDPOINT=https://<search>.search.windows.net
+        {env_prefix}_SEARCH_INDEX_NAME=<index-name>
+        ```
+
+        See `integrations/knowledge.py` and the [Knowledge & Search Guide](../docs/knowledge-search-guide.md).
+
+        ### Per-Agent MCP Servers
+
+        Give this agent its own MCP tools (overrides shared `MCP_SERVERS`):
+
+        ```bash
+        {env_prefix}_MCP_SERVERS='[{{"name":"github","transport":"stdio","command":"npx","args":["-y","@modelcontextprotocol/server-github"]}}]'
+        ```
+
+        See the [Custom Tools Guide](../docs/custom-tools-guide.md#mcp-servers).
+
         ## File Structure
 
         ```
@@ -233,7 +255,7 @@ def _template_readme(
         ├── README.md              # This file
         ├── integrations/
         │   ├── __init__.py
-        │   └── knowledge.py       # Knowledge integration stub
+        │   └── knowledge.py       # Per-agent search config
         └── tools/
             ├── __init__.py
             └── sample_tool.py     # greet_user function

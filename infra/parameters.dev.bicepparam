@@ -40,6 +40,12 @@ param appEnvVars = [
   // { name: 'AZURE_AI_SEARCH_ENDPOINT', value: 'https://<search-service>.search.windows.net' }
   // { name: 'AZURE_AI_SEARCH_INDEX_NAME', value: '<index-name>' }
   // { name: 'AZURE_AI_SEARCH_SEMANTIC_CONFIG', value: '<semantic-config-name>' }  // optional
+  //
+  // Uncomment to enable MCP servers (shared — all agents connect to these):
+  // { name: 'MCP_SERVERS', value: '[{"name":"github","transport":"stdio","command":"npx","args":["-y","@modelcontextprotocol/server-github"]}]' }
+  //
+  // Per-agent MCP servers (override shared config for a specific agent):
+  // { name: 'CODE_HELPER_MCP_SERVERS', value: '[{"name":"github","transport":"stdio","command":"npx","args":["-y","@modelcontextprotocol/server-github"]}]' }
 ]
 
 // --- Secrets (uncomment when Key Vault secrets are ready) ---

@@ -339,20 +339,62 @@ def _resolve_knowledge_base(
     return search_endpoint, search_index_name
 
 
+def _resolve_mcp_servers(config: AgentBaseConfig) -> list:
+    """Resolve MCP server configs with per-agent override support.
+
+    Checks ``{AGENT}_MCP_SERVERS`` env var first (e.g.,
+    ``CODE_HELPER_MCP_SERVERS``).  Falls back to the shared
+    ``MCP_SERVERS`` (``config.mcp_servers``) when not set.
+
+    Per-agent env var format is the same JSON array as ``MCP_SERVERS``.
+    """
+    import json
+    import os
+
+    from agents._base.config import MCPServerConfig
+
+    prefix = config.agent_name.replace("-", "_").upper()
+    per_agent_var = f"{prefix}_MCP_SERVERS"
+    per_agent_json = os.environ.get(per_agent_var)
+
+    if per_agent_json:
+        try:
+            entries = json.loads(per_agent_json)
+            servers = [MCPServerConfig(**entry) for entry in entries]
+            logger.info(
+                "Using %d per-agent MCP server(s) from %s",
+                len(servers),
+                per_agent_var,
+            )
+            return servers
+        except (json.JSONDecodeError, TypeError, ValueError):
+            logger.warning(
+                "Invalid %s JSON — falling back to shared MCP_SERVERS",
+                per_agent_var,
+                exc_info=True,
+            )
+
+    return list(config.mcp_servers) if config.mcp_servers else []
+
+
 def _build_mcp_tools(config: AgentBaseConfig) -> list:
     """Create MCP tool instances from config (unconnected).
 
     Supports stdio, HTTP, and WebSocket transports. The returned tools
     must be connected via ``async with`` before use — ``agent_session()``
     handles this automatically.
+
+    Checks per-agent ``{AGENT}_MCP_SERVERS`` env var first, then falls
+    back to the shared ``MCP_SERVERS`` config.
     """
-    if not config.mcp_servers:
+    servers = _resolve_mcp_servers(config)
+    if not servers:
         return []
 
     from agent_framework import MCPStdioTool, MCPStreamableHTTPTool, MCPWebsocketTool
 
     tools = []
-    for server in config.mcp_servers:
+    for server in servers:
         if server.transport == "stdio":
             if not server.command:
                 logger.warning(

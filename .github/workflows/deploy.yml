@@ -113,6 +113,12 @@ jobs:
           # CODE_HELPER_SEARCH_INDEX_NAME: ${{ vars.CODE_HELPER_SEARCH_INDEX_NAME }}
           # CODE_HELPER_SEARCH_SEMANTIC_CONFIG: ${{ vars.CODE_HELPER_SEARCH_SEMANTIC_CONFIG }}
           # CODE_HELPER_SEARCH_INDEXES: ${{ vars.CODE_HELPER_SEARCH_INDEXES }}
+          # MCP Servers (shared — all agents use these)
+          MCP_SERVERS: ${{ vars.MCP_SERVERS }}
+          # Per-agent MCP servers. Add entries for each agent
+          # using the {AGENT}_MCP_SERVERS naming convention. Example:
+          # CODE_HELPER_MCP_SERVERS: ${{ vars.CODE_HELPER_MCP_SERVERS }}
+          # DOC_ASSISTANT_MCP_SERVERS: ${{ vars.DOC_ASSISTANT_MCP_SERVERS }}
         run: |
           PARAM_FILE="infra/parameters.${ENVIRONMENT}.bicepparam"
 
@@ -166,6 +172,17 @@ jobs:
             fi
             if [ -n "${!d_indexes_var:-}" ]; then
               vars="${vars},{\"name\":\"${d_indexes_var}\",\"value\":\"${!d_indexes_var}\"}"
+            fi
+
+            # MCP Servers (shared)
+            if [ -n "$MCP_SERVERS" ]; then
+              vars="${vars},{\"name\":\"MCP_SERVERS\",\"value\":\"${MCP_SERVERS}\"}"
+            fi
+
+            # Per-agent MCP servers (prefix derived from agent name)
+            local mcp_var="${prefix}_MCP_SERVERS"
+            if [ -n "${!mcp_var:-}" ]; then
+              vars="${vars},{\"name\":\"${mcp_var}\",\"value\":\"${!mcp_var}\"}"
             fi
 
             vars="${vars}]"

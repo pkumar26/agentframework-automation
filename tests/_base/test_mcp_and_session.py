@@ -1,10 +1,11 @@
-"""Unit tests for _build_mcp_tools and agent_session in agent_factory."""
+"""Unit tests for _build_mcp_tools, _resolve_mcp_servers, and agent_session in agent_factory."""
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agents._base.agent_factory import _build_mcp_tools, agent_session
+from agents._base.agent_factory import _build_mcp_tools, _resolve_mcp_servers, agent_session
 from agents._base.config import MCPServerConfig
 
 
@@ -191,6 +192,103 @@ class TestBuildMcpTools:
 
         call_kwargs = mock_stdio_cls.call_args.kwargs
         assert call_kwargs["args"] == []
+
+
+# ---------------------------------------------------------------------------
+# _resolve_mcp_servers
+# ---------------------------------------------------------------------------
+
+class TestResolveMcpServers:
+    """Tests for per-agent MCP server resolution."""
+
+    def test_returns_shared_servers_when_no_per_agent(self, base_config):
+        """Should return shared config.mcp_servers when no per-agent env var."""
+        shared = [MCPServerConfig(name="shared", transport="stdio", command="cmd")]
+        base_config.mcp_servers = shared
+
+        result = _resolve_mcp_servers(base_config)
+
+        assert len(result) == 1
+        assert result[0].name == "shared"
+
+    def test_returns_empty_when_no_config(self, base_config):
+        """Should return empty list when no MCP servers configured."""
+        base_config.mcp_servers = None
+
+        result = _resolve_mcp_servers(base_config)
+
+        assert result == []
+
+    def test_per_agent_overrides_shared(self, base_config, monkeypatch):
+        """Should use per-agent env var instead of shared config."""
+        shared = [MCPServerConfig(name="shared", transport="stdio", command="cmd")]
+        base_config.mcp_servers = shared
+        base_config.agent_name = "test-agent"
+
+        per_agent = [{"name": "per-agent", "transport": "http", "url": "https://a.com"}]
+        monkeypatch.setenv("TEST_AGENT_MCP_SERVERS", json.dumps(per_agent))
+
+        result = _resolve_mcp_servers(base_config)
+
+        assert len(result) == 1
+        assert result[0].name == "per-agent"
+        assert result[0].transport == "http"
+
+    def test_per_agent_with_no_shared(self, base_config, monkeypatch):
+        """Should use per-agent even when shared is empty."""
+        base_config.mcp_servers = None
+        base_config.agent_name = "test-agent"
+
+        per_agent = [{"name": "only-me", "transport": "stdio", "command": "npx"}]
+        monkeypatch.setenv("TEST_AGENT_MCP_SERVERS", json.dumps(per_agent))
+
+        result = _resolve_mcp_servers(base_config)
+
+        assert len(result) == 1
+        assert result[0].name == "only-me"
+
+    def test_invalid_json_falls_back_to_shared(self, base_config, monkeypatch):
+        """Should fall back to shared when per-agent JSON is invalid."""
+        shared = [MCPServerConfig(name="shared", transport="stdio", command="cmd")]
+        base_config.mcp_servers = shared
+        base_config.agent_name = "test-agent"
+
+        monkeypatch.setenv("TEST_AGENT_MCP_SERVERS", "not-json")
+
+        result = _resolve_mcp_servers(base_config)
+
+        assert len(result) == 1
+        assert result[0].name == "shared"
+
+    def test_kebab_case_name_to_prefix(self, base_config, monkeypatch):
+        """Should derive correct prefix from kebab-case agent name."""
+        base_config.mcp_servers = None
+        base_config.agent_name = "my-cool-agent"
+
+        per_agent = [{"name": "cool-mcp", "transport": "http", "url": "https://a.com"}]
+        monkeypatch.setenv("MY_COOL_AGENT_MCP_SERVERS", json.dumps(per_agent))
+
+        result = _resolve_mcp_servers(base_config)
+
+        assert len(result) == 1
+        assert result[0].name == "cool-mcp"
+
+    def test_multiple_per_agent_servers(self, base_config, monkeypatch):
+        """Should parse multiple servers from per-agent JSON array."""
+        base_config.mcp_servers = None
+        base_config.agent_name = "test-agent"
+
+        per_agent = [
+            {"name": "s1", "transport": "stdio", "command": "cmd1"},
+            {"name": "s2", "transport": "http", "url": "https://b.com"},
+        ]
+        monkeypatch.setenv("TEST_AGENT_MCP_SERVERS", json.dumps(per_agent))
+
+        result = _resolve_mcp_servers(base_config)
+
+        assert len(result) == 2
+        assert result[0].name == "s1"
+        assert result[1].name == "s2"
 
 
 # ---------------------------------------------------------------------------

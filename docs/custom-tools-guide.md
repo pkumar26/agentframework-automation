@@ -372,3 +372,97 @@ If you're migrating from the Foundry Agent Service SDK (`azure-ai-projects`), no
 | Docstring `Args:` section for descriptions | `Annotated[type, Field(description=...)]` |
 | `deploy_agent.py` pushes tools to Foundry | Tools run in-process — just restart |
 | `FunctionTool` objects in TOOLS list | Plain function references in TOOLS list |
+
+## MCP Servers
+
+[![MCP](https://img.shields.io/badge/MCP-Model%20Context%20Protocol-8A2BE2)](https://modelcontextprotocol.io/)
+
+In addition to Python function tools, agents can connect to external tools and services via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/). MCP servers are discovered, connected, and exposed as tools automatically.
+
+### How MCP Works
+
+When an agent starts (via `app.py` or `agent_session()`):
+
+1. The factory resolves MCP server configs (per-agent override → shared fallback)
+2. Each MCP server is connected as an async context manager
+3. The MCP tools are merged with the agent's Python function tools
+4. On shutdown, all MCP connections are cleanly closed
+
+### Configuration
+
+MCP servers are configured via environment variables as JSON arrays:
+
+| Scope | Env Var | Description |
+|-------|---------|-------------|
+| **Shared** | `MCP_SERVERS` | All agents connect to these MCP servers |
+| **Per-agent** | `{AGENT}_MCP_SERVERS` | Override for a specific agent (e.g., `CODE_HELPER_MCP_SERVERS`) |
+
+When a per-agent var is set, the agent uses **only** those servers — the shared `MCP_SERVERS` is ignored for that agent.
+
+### Supported Transports
+
+| Transport | Config Fields | Example |
+|-----------|---------------|---------|
+| `stdio` | `command`, `args`, `env` | Local CLI tools (npx, python) |
+| `http` | `url` | Remote HTTP endpoints |
+| `websocket` | `url` | WebSocket endpoints |
+
+### Examples
+
+**GitHub MCP server (stdio):**
+
+```bash
+MCP_SERVERS='[{"name":"github","transport":"stdio","command":"npx","args":["-y","@modelcontextprotocol/server-github"],"env":{"GITHUB_PERSONAL_ACCESS_TOKEN":"ghp_..."}}]'
+```
+
+**Azure MCP server (stdio):**
+
+```bash
+MCP_SERVERS='[{"name":"azure","transport":"stdio","command":"npx","args":["-y","@azure/mcp@latest","server","start"]}]'
+```
+
+**Remote HTTP MCP server:**
+
+```bash
+MCP_SERVERS='[{"name":"web-api","transport":"http","url":"https://api.example.com/mcp"}]'
+```
+
+**Multiple servers (JSON array):**
+
+```bash
+MCP_SERVERS='[{"name":"azure","transport":"stdio","command":"npx","args":["-y","@azure/mcp@latest","server","start"]},{"name":"github","transport":"stdio","command":"npx","args":["-y","@modelcontextprotocol/server-github"]}]'
+```
+
+### Per-Agent MCP Configuration
+
+Give different agents different MCP tools:
+
+```bash
+# code-helper gets GitHub + filesystem MCP
+CODE_HELPER_MCP_SERVERS='[{"name":"github","transport":"stdio","command":"npx","args":["-y","@modelcontextprotocol/server-github"]},{"name":"filesystem","transport":"stdio","command":"npx","args":["-y","@modelcontextprotocol/server-filesystem","/workspace"]}]'
+
+# doc-assistant gets a custom docs API
+DOC_ASSISTANT_MCP_SERVERS='[{"name":"docs-api","transport":"http","url":"https://docs-api.example.com/mcp"}]'
+```
+
+The agent prefix is derived from the agent name: `code-helper` → `CODE_HELPER`, `doc-assistant` → `DOC_ASSISTANT`, `my-new-agent` → `MY_NEW_AGENT`.
+
+### MCP Server Config Schema
+
+Each server object in the JSON array supports these fields:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | yes | Server identifier |
+| `transport` | string | no | `stdio` (default), `http`, or `websocket` |
+| `command` | string | stdio only | Executable to run |
+| `args` | string[] | no | Command arguments |
+| `env` | object | no | Environment variables for the process |
+| `url` | string | http/ws only | Server URL |
+| `description` | string | no | Human-readable description |
+
+### Deployment
+
+For **local dev**, set MCP vars in `.env`. For **Container Apps**, set them as GitHub Actions vars (for the deploy workflow) or in the Bicep parameter files. See the [Deployment Guide](deployment-guide.md) for details.
+
+> **Note:** Stdio-transport MCP servers require the executable (e.g., `npx`) to be available in the container image. The default `Dockerfile` includes Node.js for this purpose. HTTP/WebSocket MCP servers work without additional container dependencies.

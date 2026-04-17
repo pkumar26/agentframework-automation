@@ -241,6 +241,23 @@ DOC_ASSISTANT_SEARCH_INDEX_NAME=product-docs
 
 Shared config (Options A/B/C) applies to all agents. Per-agent config (Option D) overrides it for individual agents via `integrations/knowledge.py`. See the [Knowledge & Search Guide](docs/knowledge-search-guide.md) for full setup, RBAC, semantic search, and troubleshooting.
 
+## MCP Servers (Tool Integration)
+
+[![MCP](https://img.shields.io/badge/MCP-Model%20Context%20Protocol-8A2BE2?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJ3aGl0ZSI+PHBhdGggZD0iTTEyIDJMMiA3djEwbDEwIDVsMTAtNVY3TDEyIDJ6Ii8+PC9zdmc+)](https://modelcontextprotocol.io/)
+
+Connect your agents to external tools and services via the [Model Context Protocol](https://modelcontextprotocol.io/). MCP servers are automatically connected as tools when the agent starts.
+
+```bash
+# .env — shared config (all agents use the same MCP servers):
+MCP_SERVERS='[{"name":"github","transport":"stdio","command":"npx","args":["-y","@modelcontextprotocol/server-github"],"env":{"GITHUB_PERSONAL_ACCESS_TOKEN":"ghp_..."}}]'
+
+# Per-agent MCP servers (each agent gets its own set of MCP tools):
+CODE_HELPER_MCP_SERVERS='[{"name":"github","transport":"stdio","command":"npx","args":["-y","@modelcontextprotocol/server-github"]}]'
+DOC_ASSISTANT_MCP_SERVERS='[{"name":"web-api","transport":"http","url":"https://docs-api.example.com/mcp"}]'
+```
+
+Shared `MCP_SERVERS` applies to all agents. Per-agent `{AGENT}_MCP_SERVERS` overrides the shared config for that agent. Supported transports: `stdio`, `http`, `websocket`. See the [Custom Tools Guide](docs/custom-tools-guide.md#mcp-servers) for configuration details and examples.
+
 ## Notebooks
 
 Interactive Jupyter notebooks for hands-on exploration:
