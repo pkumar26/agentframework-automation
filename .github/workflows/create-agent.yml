@@ -40,7 +40,7 @@ jobs:
 
       - name: Validate agent name
         run: |
-          python -c "
+          uv run python -c "
           import os, sys
           from scripts.create_agent import validate_name
           name = os.environ['AGENT_NAME']
@@ -52,7 +52,7 @@ jobs:
           "
 
       - name: Run scaffolding script
-        run: python scripts/create_agent.py --name "$AGENT_NAME" --model "$AGENT_MODEL"
+        run: uv run python scripts/create_agent.py --name "$AGENT_NAME" --model "$AGENT_MODEL"
 
       - name: Create branch and commit
         run: |

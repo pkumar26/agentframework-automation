@@ -52,7 +52,7 @@ jobs:
       - name: Validate agent target
         if: env.AGENT_NAME != 'all'
         run: |
-          python -c "
+          uv run python -c "
           import os, sys
           from agents.registry import REGISTRY
           target = os.environ['AGENT_NAME']
@@ -101,18 +101,33 @@ jobs:
       - name: Deploy agent(s) to ACA via Bicep
         env:
           AZURE_AI_PROJECT_ENDPOINT: ${{ vars.AZURE_AI_PROJECT_ENDPOINT }}
+          AZURE_AUTHORITY_HOST: ${{ vars.AZURE_AUTHORITY_HOST }}
           AZURE_AI_SEARCH_ENDPOINT: ${{ vars.AZURE_AI_SEARCH_ENDPOINT }}
           AZURE_AI_SEARCH_INDEX_NAME: ${{ vars.AZURE_AI_SEARCH_INDEX_NAME }}
           AZURE_AI_SEARCH_SEMANTIC_CONFIG: ${{ vars.AZURE_AI_SEARCH_SEMANTIC_CONFIG }}
+          AZURE_AI_SEARCH_KNOWLEDGE_BASE: ${{ vars.AZURE_AI_SEARCH_KNOWLEDGE_BASE }}
           AZURE_AI_SEARCH_INDEXES: ${{ vars.AZURE_AI_SEARCH_INDEXES }}
+          # Option D: Per-agent search vars. Add entries for each agent
+          # using the {AGENT}_SEARCH_* naming convention. Example:
+          # CODE_HELPER_SEARCH_ENDPOINT: ${{ vars.CODE_HELPER_SEARCH_ENDPOINT }}
+          # CODE_HELPER_SEARCH_INDEX_NAME: ${{ vars.CODE_HELPER_SEARCH_INDEX_NAME }}
+          # CODE_HELPER_SEARCH_SEMANTIC_CONFIG: ${{ vars.CODE_HELPER_SEARCH_SEMANTIC_CONFIG }}
+          # CODE_HELPER_SEARCH_INDEXES: ${{ vars.CODE_HELPER_SEARCH_INDEXES }}
         run: |
           PARAM_FILE="infra/parameters.${ENVIRONMENT}.bicepparam"
 
           # Build appEnvVars JSON array — always include core vars,
-          # conditionally add search vars when configured.
+          # conditionally add search/sovereign vars when configured.
           build_env_vars() {
             local name="$1"
             local vars="[{\"name\":\"AGENT_NAME\",\"value\":\"${name}\"},{\"name\":\"AZURE_AI_PROJECT_ENDPOINT\",\"value\":\"${AZURE_AI_PROJECT_ENDPOINT}\"},{\"name\":\"ENVIRONMENT\",\"value\":\"${ENVIRONMENT}\"}"
+
+            # Sovereign / Government cloud
+            if [ -n "$AZURE_AUTHORITY_HOST" ]; then
+              vars="${vars},{\"name\":\"AZURE_AUTHORITY_HOST\",\"value\":\"${AZURE_AUTHORITY_HOST}\"}"
+            fi
+
+            # Option A: Single index
             if [ -n "$AZURE_AI_SEARCH_ENDPOINT" ]; then
               vars="${vars},{\"name\":\"AZURE_AI_SEARCH_ENDPOINT\",\"value\":\"${AZURE_AI_SEARCH_ENDPOINT}\"}"
             fi
@@ -122,9 +137,37 @@ jobs:
             if [ -n "$AZURE_AI_SEARCH_SEMANTIC_CONFIG" ]; then
               vars="${vars},{\"name\":\"AZURE_AI_SEARCH_SEMANTIC_CONFIG\",\"value\":\"${AZURE_AI_SEARCH_SEMANTIC_CONFIG}\"}"
             fi
+
+            # Option B: Foundry knowledge base name
+            if [ -n "$AZURE_AI_SEARCH_KNOWLEDGE_BASE" ]; then
+              vars="${vars},{\"name\":\"AZURE_AI_SEARCH_KNOWLEDGE_BASE\",\"value\":\"${AZURE_AI_SEARCH_KNOWLEDGE_BASE}\"}"
+            fi
+
+            # Option C: Multiple shared indexes
             if [ -n "$AZURE_AI_SEARCH_INDEXES" ]; then
               vars="${vars},{\"name\":\"AZURE_AI_SEARCH_INDEXES\",\"value\":\"${AZURE_AI_SEARCH_INDEXES}\"}"
             fi
+
+            # Option D: Per-agent indexes (prefix derived from agent name)
+            local prefix
+            prefix=$(echo "$name" | tr '-' '_' | tr '[:lower:]' '[:upper:]')
+            local d_endpoint_var="${prefix}_SEARCH_ENDPOINT"
+            local d_index_var="${prefix}_SEARCH_INDEX_NAME"
+            local d_semantic_var="${prefix}_SEARCH_SEMANTIC_CONFIG"
+            local d_indexes_var="${prefix}_SEARCH_INDEXES"
+            if [ -n "${!d_endpoint_var:-}" ]; then
+              vars="${vars},{\"name\":\"${d_endpoint_var}\",\"value\":\"${!d_endpoint_var}\"}"
+            fi
+            if [ -n "${!d_index_var:-}" ]; then
+              vars="${vars},{\"name\":\"${d_index_var}\",\"value\":\"${!d_index_var}\"}"
+            fi
+            if [ -n "${!d_semantic_var:-}" ]; then
+              vars="${vars},{\"name\":\"${d_semantic_var}\",\"value\":\"${!d_semantic_var}\"}"
+            fi
+            if [ -n "${!d_indexes_var:-}" ]; then
+              vars="${vars},{\"name\":\"${d_indexes_var}\",\"value\":\"${!d_indexes_var}\"}"
+            fi
+
             vars="${vars}]"
             echo "$vars"
           }
@@ -186,7 +229,7 @@ jobs:
           }
 
           if [ "$AGENT_NAME" = "all" ]; then
-            AGENTS=$(python -c "from agents.registry import REGISTRY; print(' '.join(e.name for e in REGISTRY.list_agents()))")
+            AGENTS=$(uv run python -c "from agents.registry import REGISTRY; print(' '.join(e.name for e in REGISTRY.list_agents()))")
             for agent in $AGENTS; do
               deploy_agent "$agent"
             done
@@ -201,4 +244,4 @@ jobs:
       - name: Run integration tests
         env:
           AZURE_AI_PROJECT_ENDPOINT: ${{ vars.AZURE_AI_PROJECT_ENDPOINT }}
-        run: pytest tests/ -m integration -v
+        run: uv run pytest tests/ -m integration -v

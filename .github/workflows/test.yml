@@ -25,13 +25,13 @@ jobs:
         run: uv sync --group dev
 
       - name: Check formatting (Black)
-        run: black --check .
+        run: uv run black --check .
 
       - name: Check import sorting (isort)
-        run: isort --check .
+        run: uv run isort --check .
 
       - name: Lint (flake8)
-        run: flake8 .
+        run: uv run flake8 .
 
       - name: Run unit tests
-        run: pytest tests/ -m "not integration" -v
+        run: uv run pytest tests/ -m "not integration" -v
