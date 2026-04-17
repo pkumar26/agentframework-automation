@@ -42,7 +42,7 @@ resource existingIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023
 output identityResourceId string = createNewIdentity ? newIdentity.id : existingIdentityResourceId
 
 @description('Principal ID of the managed identity (for role assignments).')
-output identityPrincipalId string = createNewIdentity ? newIdentity.properties.principalId : existingIdentity!.properties.principalId
+output identityPrincipalId string = createNewIdentity ? newIdentity!.properties.principalId : existingIdentity!.properties.principalId
 
 @description('Client ID of the managed identity (for DefaultAzureCredential).')
-output identityClientId string = createNewIdentity ? newIdentity.properties.clientId : existingIdentity!.properties.clientId
+output identityClientId string = createNewIdentity ? newIdentity!.properties.clientId : existingIdentity!.properties.clientId

@@ -42,6 +42,6 @@ output workspaceId string = logAnalytics.id
 @description('Customer ID of the Log Analytics workspace (for ACA binding).')
 output customerId string = logAnalytics.properties.customerId
 
-#disable-next-line outputs-should-not-contain-secrets
 @description('Primary shared key for the Log Analytics workspace.')
+#disable-next-line outputs-should-not-contain-secrets
 output primarySharedKey string = logAnalytics.listKeys().primarySharedKey

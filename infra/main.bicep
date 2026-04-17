@@ -163,12 +163,12 @@ module managedEnv './modules/managed-environment.bicep' = if (createNewEnvironme
 
 // Resolve environment ID: new module output or existing external ID
 var resolvedEnvironmentId = createNewEnvironment
-  ? managedEnv.outputs.environmentId
+  ? managedEnv!.outputs.environmentId
   : existingManagedEnvironmentId
 
 // Resolve environment name for output
 var resolvedEnvironmentName = createNewEnvironment
-  ? managedEnv.outputs.environmentName
+  ? managedEnv!.outputs.environmentName
   : last(split(existingManagedEnvironmentId, '/'))
 
 // ---------------------------------------------------------------------------
